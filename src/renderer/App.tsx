@@ -128,7 +128,8 @@ function App() {
 
   // 渲染当前页面
   const renderPage = () => {
-    if (!currentBook) {
+    // settings和genres页面不需要书籍也能访问
+    if (!currentBook && currentPage !== 'settings' && currentPage !== 'genres') {
       return (
         <div className="flex-1 flex items-center justify-center text-gray-400">
           <div className="text-center">
@@ -147,23 +148,23 @@ function App() {
 
     switch (currentPage) {
       case 'overview':
-        return <Overview book={currentBook} onUpdate={handleUpdateBook} />;
+        return <Overview book={currentBook!} onUpdate={handleUpdateBook} />;
       case 'chapters':
-        return <Chapters book={currentBook} onUpdate={handleUpdateBook} settings={settings} />;
+        return <Chapters book={currentBook!} onUpdate={handleUpdateBook} settings={settings} />;
       case 'characters':
-        return <Characters book={currentBook} onUpdate={handleUpdateBook} settings={settings} />;
+        return <Characters book={currentBook!} onUpdate={handleUpdateBook} settings={settings} />;
       case 'settings':
         return <SettingsPage settings={settings} onUpdate={setSettings} />;
       case 'genres':
         return <Genres />;
       case 'assistant':
-        return <WritingAssistant book={currentBook} onUpdate={handleUpdateBook} settings={settings} />;
+        return <WritingAssistant book={currentBook!} onUpdate={handleUpdateBook} settings={settings} />;
       case 'plot':
-        return <PlotControl book={currentBook} onUpdate={handleUpdateBook} settings={settings} />;
+        return <PlotControl book={currentBook!} onUpdate={handleUpdateBook} settings={settings} />;
       case 'style':
-        return <StyleLearn book={currentBook} onUpdate={handleUpdateBook} />;
+        return <StyleLearn book={currentBook!} onUpdate={handleUpdateBook} />;
       default:
-        return <Overview book={currentBook} onUpdate={handleUpdateBook} />;
+        return <Overview book={currentBook!} onUpdate={handleUpdateBook} />;
     }
   };
 
