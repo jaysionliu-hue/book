@@ -154,7 +154,7 @@ function App() {
       case 'characters':
         return <Characters book={currentBook!} onUpdate={handleUpdateBook} settings={settings} />;
       case 'settings':
-        return <SettingsPage settings={settings} onUpdate={setSettings} />;
+        return <SettingsPage onSave={setSettings} />;
       case 'genres':
         return <Genres />;
       case 'assistant':

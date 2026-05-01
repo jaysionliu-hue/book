@@ -84,8 +84,13 @@ app.on('activate', () => {
 // ============ IPC 处理 ============
 
 // 设置相关
-ipcMain.handle('settings:get', () => store.get('settings'))
+ipcMain.handle('settings:get', () => {
+  const s = store.get('settings')
+  console.log('[Settings] 读取settings:', JSON.stringify(s))
+  return s
+})
 ipcMain.handle('settings:set', (_, settings) => {
+  console.log('[Settings] 保存settings:', JSON.stringify(settings))
   store.set('settings', settings)
   return true
 })
@@ -158,7 +163,10 @@ ipcMain.handle('books:getCurrent', () => {
 ipcMain.handle('ai:chat', async (_, { systemPrompt, userPrompt }) => {
   const settings = store.get('settings') as any || {}
   
+  console.log('[AI] 当前settings:', JSON.stringify(settings))
+  
   if (!settings.apiKey || settings.apiKey.trim() === '') {
+    console.error('[AI] API Key为空')
     throw new Error('请先在设置中配置DeepSeek API Key')
   }
 
@@ -167,6 +175,8 @@ ipcMain.handle('ai:chat', async (_, { systemPrompt, userPrompt }) => {
     const model = settings.model || 'deepseek-chat'
     const maxTokens = settings.maxTokens || 2000
     const temperature = settings.temperature ?? 0.7
+    
+    console.log('[AI] 发送请求到:', apiUrl)
     
     const response = await fetch(`${apiUrl}/chat/completions`, {
       method: 'POST',
