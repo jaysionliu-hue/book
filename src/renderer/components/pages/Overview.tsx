@@ -13,8 +13,7 @@ export default function Overview({ book, onUpdate, settings }: OverviewProps) {
 
   // 打开书籍文件夹
   const handleOpenFolder = async () => {
-    const folderPath = await window.api.books.getPath(book.id);
-    await window.api.books.openFolder(book.id);
+    await window.api.books.openFolder(book.title);
   };
 
   // AI生成内容

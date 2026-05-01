@@ -20,9 +20,79 @@ function getNovelsDir() {
   return novelsDir
 }
 
-// 获取书籍目录
-function getBookDir(bookId: string) {
-  return path.join(getNovelsDir(), bookId)
+// 获取书籍目录（使用书名作为文件夹名）
+function getBookDir(bookTitle: string) {
+  // 规范化文件夹名称（去除特殊字符）
+  const safeName = bookTitle.replace(/[<>:"/\\|?*]/g, '_')
+  return path.join(getNovelsDir(), safeName)
+}
+
+// 初始化书籍文件夹结构
+function initBookFolder(bookTitle: string, bookData: any) {
+  const bookDir = getBookDir(bookTitle)
+  
+  // 创建文件夹
+  const folders = ['chapters', 'objects', 'outline', 'roles', 'rules']
+  folders.forEach(folder => {
+    const folderPath = path.join(bookDir, folder)
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true })
+    }
+  })
+  
+  // 创建.feelfish配置目录
+  const configDir = path.join(bookDir, '.feelfish')
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true })
+  }
+  
+  // 创建书籍配置
+  const configPath = path.join(bookDir, 'feelfish.json')
+  const config = {
+    title: bookData.title,
+    genreId: bookData.genreId,
+    genreName: bookData.genreName,
+    channel: bookData.channel,
+    tags: bookData.tags,
+    synopsis: bookData.synopsis,
+    createdAt: bookData.createdAt,
+    updatedAt: bookData.updatedAt
+  }
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  
+  // 保存初始数据文件
+  saveBookFile(bookTitle, 'objects/worldview.md', bookData.settings?.worldView || '')
+  saveBookFile(bookTitle, 'outline/main.md', '')
+  saveBookFile(bookTitle, 'roles/list.md', '')
+  saveBookFile(bookTitle, 'rules/writing.md', JSON.stringify(bookData.writingRules || {}, null, 2))
+  saveBookFile(bookTitle, 'core-setting.json', JSON.stringify(bookData.coreSetting || {}, null, 2))
+  saveBookFile(bookTitle, 'story-structure.json', JSON.stringify(bookData.storyStructure || {}, null, 2))
+  saveBookFile(bookTitle, 'characters.json', JSON.stringify(bookData.characters || [], null, 2))
+  saveBookFile(bookTitle, 'chapters/index.json', JSON.stringify([], null, 2))
+  
+  return bookDir
+}
+
+// 保存书籍文件
+function saveBookFile(bookTitle: string, filePath: string, content: string) {
+  const bookDir = getBookDir(bookTitle)
+  const fullPath = path.join(bookDir, filePath)
+  const dir = path.dirname(fullPath)
+  
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  
+  fs.writeFileSync(fullPath, content, 'utf-8')
+}
+
+// 读取书籍文件
+function readBookFile(bookTitle: string, filePath: string): string {
+  const fullPath = path.join(getBookDir(bookTitle), filePath)
+  if (fs.existsSync(fullPath)) {
+    return fs.readFileSync(fullPath, 'utf-8')
+  }
+  return ''
 }
 
 // 初始化存储（仅用于设置和题材）
@@ -52,7 +122,7 @@ const store = new Store({
       { id: 'male-sci-fi', name: '科幻', channel: 'male', category: 'scifi' },
       { id: 'male-martial', name: '武侠', channel: 'male', category: 'martial' }
     ],
-    currentBookId: null
+    currentBookTitle: null
   }
 })
 
@@ -101,53 +171,61 @@ app.on('activate', () => {
 
 // ============ 书籍文件夹操作 ============
 
-// 确保书籍目录存在
-function ensureBookDir(bookId: string) {
-  const bookDir = getBookDir(bookId)
-  const chaptersDir = path.join(bookDir, 'chapters')
-  const exportsDir = path.join(bookDir, 'exports')
+// 获取所有书籍（读取索引）
+function getBooksIndex() {
+  const novelsDir = getNovelsDir()
+  const books: any[] = []
   
-  if (!fs.existsSync(bookDir)) {
-    fs.mkdirSync(bookDir, { recursive: true })
-  }
-  if (!fs.existsSync(chaptersDir)) {
-    fs.mkdirSync(chaptersDir, { recursive: true })
-  }
-  if (!fs.existsSync(exportsDir)) {
-    fs.mkdirSync(exportsDir, { recursive: true })
+  if (!fs.existsSync(novelsDir)) return books
+  
+  const entries = fs.readdirSync(novelsDir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+      const configPath = path.join(novelsDir, entry.name, 'feelfish.json')
+      if (fs.existsSync(configPath)) {
+        try {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+          books.push(config)
+        } catch (e) {
+          // 忽略无效配置
+        }
+      }
+    }
   }
   
-  return bookDir
+  return books
 }
 
-// 读取书籍索引
-function readBookIndex(): any[] {
-  const indexPath = path.join(getNovelsDir(), '.index.json')
-  if (fs.existsSync(indexPath)) {
-    return JSON.parse(fs.readFileSync(indexPath, 'utf-8'))
+// 读取完整书籍数据
+function readFullBook(bookTitle: string): any {
+  const bookDir = getBookDir(bookTitle)
+  if (!fs.existsSync(bookDir)) return null
+  
+  return {
+    title: bookTitle,
+    coreSetting: JSON.parse(readBookFile(bookTitle, 'core-setting.json') || '{}'),
+    settings: {
+      worldView: readBookFile(bookTitle, 'objects/worldview.md'),
+      factions: [],
+      rules: [],
+      geography: [],
+      props: [],
+      timeline: []
+    },
+    characters: JSON.parse(readBookFile(bookTitle, 'characters.json') || '[]'),
+    storyStructure: JSON.parse(readBookFile(bookTitle, 'story-structure.json') || '{"act1":"","act2":"","act3":"","chapters":[]}'),
+    writingRules: JSON.parse(readBookFile(bookTitle, 'rules/writing.md') || '{}'),
+    plotPoints: [],
+    chapters: JSON.parse(readBookFile(bookTitle, 'chapters/index.json') || '[]'),
+    currentChapter: 1,
+    totalWordCount: calculateTotalWords(bookTitle)
   }
-  return []
 }
 
-// 保存书籍索引
-function saveBookIndex(books: any[]) {
-  const indexPath = path.join(getNovelsDir(), '.index.json')
-  fs.writeFileSync(indexPath, JSON.stringify(books, null, 2), 'utf-8')
-}
-
-// 读取书籍数据
-function readBook(bookId: string): any {
-  const bookPath = path.join(getBookDir(bookId), 'book.json')
-  if (fs.existsSync(bookPath)) {
-    return JSON.parse(fs.readFileSync(bookPath, 'utf-8'))
-  }
-  return null
-}
-
-// 保存书籍数据
-function saveBook(book: any) {
-  const bookPath = path.join(getBookDir(book.id), 'book.json')
-  fs.writeFileSync(bookPath, JSON.stringify(book, null, 2), 'utf-8')
+// 计算总字数
+function calculateTotalWords(bookTitle: string): number {
+  const chaptersIndex = JSON.parse(readBookFile(bookTitle, 'chapters/index.json') || '[]')
+  return chaptersIndex.reduce((sum: number, ch: any) => sum + (ch.wordCount || 0), 0)
 }
 
 // ============ IPC 处理 ============
@@ -184,116 +262,106 @@ ipcMain.handle('genres:delete', (_, id) => {
 
 // 书籍相关 - 使用独立文件夹
 ipcMain.handle('books:list', () => {
-  // 返回书籍索引（轻量信息）
-  return readBookIndex().map(book => ({
-    id: book.id,
-    title: book.title,
-    genreId: book.genreId,
-    genreName: book.genreName,
-    channel: book.channel,
-    tags: book.tags,
-    synopsis: book.synopsis,
-    currentChapter: book.currentChapter,
-    totalWordCount: book.totalWordCount,
-    createdAt: book.createdAt,
-    updatedAt: book.updatedAt
-  }))
+  return getBooksIndex()
 })
 
 ipcMain.handle('books:create', (_, book) => {
-  // 创建书籍文件夹
-  ensureBookDir(book.id)
-  
-  // 保存完整书籍数据
-  saveBook(book)
-  
-  // 更新索引
-  const index = readBookIndex()
-  index.push({
-    id: book.id,
-    title: book.title,
-    genreId: book.genreId,
-    genreName: book.genreName,
-    channel: book.channel,
-    tags: book.tags,
-    synopsis: book.synopsis,
-    currentChapter: book.currentChapter,
-    totalWordCount: book.totalWordCount,
-    createdAt: book.createdAt,
-    updatedAt: book.updatedAt
-  })
-  saveBookIndex(index)
-  
-  // 记录当前书籍
-  store.set('currentBookId', book.id)
-  
-  console.log('[Books] 创建书籍:', book.title, '目录:', getBookDir(book.id))
+  const bookDir = initBookFolder(book.title, book)
+  store.set('currentBookTitle', book.title)
+  console.log('[Books] 创建书籍:', book.title, '目录:', bookDir)
   return book
 })
 
-ipcMain.handle('books:get', (_, id) => {
-  return readBook(id)
+ipcMain.handle('books:get', (_, title) => {
+  return readFullBook(title)
 })
 
-ipcMain.handle('books:update', (_, id, data) => {
-  const book = readBook(id)
-  if (book) {
-    const updated = { ...book, ...data, updatedAt: Date.now() }
-    saveBook(updated)
-    
-    // 更新索引
-    const index = readBookIndex()
-    const idx = index.findIndex(b => b.id === id)
-    if (idx !== -1) {
-      index[idx] = { ...index[idx], ...data, updatedAt: Date.now() }
-      saveBookIndex(index)
-    }
-    
-    return updated
+ipcMain.handle('books:getByTitle', (_, title) => {
+  return readFullBook(title)
+})
+
+ipcMain.handle('books:update', (_, title, data) => {
+  const bookDir = getBookDir(title)
+  if (!fs.existsSync(bookDir)) return null
+  
+  // 根据数据类型保存到对应文件
+  if (data.coreSetting) {
+    saveBookFile(title, 'core-setting.json', JSON.stringify(data.coreSetting, null, 2))
   }
-  return null
+  if (data.settings?.worldView !== undefined) {
+    saveBookFile(title, 'objects/worldview.md', data.settings.worldView)
+  }
+  if (data.characters) {
+    saveBookFile(title, 'characters.json', JSON.stringify(data.characters, null, 2))
+  }
+  if (data.storyStructure) {
+    saveBookFile(title, 'story-structure.json', JSON.stringify(data.storyStructure, null, 2))
+  }
+  if (data.writingRules) {
+    saveBookFile(title, 'rules/writing.md', JSON.stringify(data.writingRules, null, 2))
+  }
+  if (data.chapters) {
+    saveBookFile(title, 'chapters/index.json', JSON.stringify(data.chapters, null, 2))
+  }
+  
+  // 更新配置
+  const configPath = path.join(bookDir, 'feelfish.json')
+  if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    config.updatedAt = Date.now()
+    if (data.totalWordCount !== undefined) {
+      config.totalWordCount = data.totalWordCount
+    }
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  }
+  
+  return readFullBook(title)
 })
 
-ipcMain.handle('books:delete', (_, id) => {
-  // 删除书籍文件夹
-  const bookDir = getBookDir(id)
+ipcMain.handle('books:delete', (_, title) => {
+  const bookDir = getBookDir(title)
   if (fs.existsSync(bookDir)) {
     fs.rmSync(bookDir, { recursive: true, force: true })
   }
   
-  // 更新索引
-  const index = readBookIndex().filter(b => b.id !== id)
-  saveBookIndex(index)
-  
-  // 清除当前书籍
-  if (store.get('currentBookId') === id) {
-    store.set('currentBookId', null)
+  if (store.get('currentBookTitle') === title) {
+    store.set('currentBookTitle', null)
   }
   
   return true
 })
 
-ipcMain.handle('books:setCurrent', (_, id) => {
-  store.set('currentBookId', id)
+ipcMain.handle('books:setCurrent', (_, title) => {
+  store.set('currentBookTitle', title)
   return true
 })
 
 ipcMain.handle('books:getCurrent', () => {
-  const currentId = store.get('currentBookId')
-  if (!currentId) return null
-  return readBook(currentId)
+  const currentTitle = store.get('currentBookTitle')
+  if (!currentTitle) return null
+  return readFullBook(currentTitle)
 })
 
-ipcMain.handle('books:openFolder', (_, id) => {
-  const bookDir = getBookDir(id)
+ipcMain.handle('books:openFolder', (_, title) => {
+  const bookDir = getBookDir(title)
   if (fs.existsSync(bookDir)) {
     require('electron').shell.openPath(bookDir)
   }
   return bookDir
 })
 
-ipcMain.handle('books:getPath', (_, id) => {
-  return getBookDir(id)
+ipcMain.handle('books:getPath', (_, title) => {
+  return getBookDir(title)
+})
+
+// 读写书籍内的文件
+ipcMain.handle('book:readFile', (_, title, filePath) => {
+  return readBookFile(title, filePath)
+})
+
+ipcMain.handle('book:writeFile', (_, title, filePath, content) => {
+  saveBookFile(title, filePath, content)
+  return true
 })
 
 // DeepSeek API 调用

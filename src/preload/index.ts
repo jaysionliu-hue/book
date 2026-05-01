@@ -20,13 +20,19 @@ contextBridge.exposeInMainWorld('api', {
   books: {
     list: () => ipcRenderer.invoke('books:list'),
     create: (book: any) => ipcRenderer.invoke('books:create', book),
-    get: (id: string) => ipcRenderer.invoke('books:get', id),
-    update: (id: string, data: any) => ipcRenderer.invoke('books:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('books:delete', id),
-    setCurrent: (id: string) => ipcRenderer.invoke('books:setCurrent', id),
+    get: (title: string) => ipcRenderer.invoke('books:get', title),
+    update: (title: string, data: any) => ipcRenderer.invoke('books:update', title, data),
+    delete: (title: string) => ipcRenderer.invoke('books:delete', title),
+    setCurrent: (title: string) => ipcRenderer.invoke('books:setCurrent', title),
     getCurrent: () => ipcRenderer.invoke('books:getCurrent'),
-    openFolder: (id: string) => ipcRenderer.invoke('books:openFolder', id),
-    getPath: (id: string) => ipcRenderer.invoke('books:getPath', id)
+    openFolder: (title: string) => ipcRenderer.invoke('books:openFolder', title),
+    getPath: (title: string) => ipcRenderer.invoke('books:getPath', title)
+  },
+
+  // 书籍文件操作
+  bookFile: {
+    read: (title: string, filePath: string) => ipcRenderer.invoke('book:readFile', title, filePath),
+    write: (title: string, filePath: string, content: string) => ipcRenderer.invoke('book:writeFile', title, filePath, content)
   },
 
   // AI调用
