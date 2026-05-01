@@ -1,4 +1,56 @@
 // 全局类型定义
+
+// API设置
+export interface ApiSettings {
+  provider: 'deepseek' | 'openai' | 'custom';
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+// Agent常量
+export const DIALOGUE_AGENT = 'dialogue';
+export const DESCRIPTION_AGENT = 'description';
+export const CONFLICT_AGENT = 'conflict';
+export const CHARACTER_AGENT = 'character';
+export const CHAPTER_AGENT = 'chapter';
+export const WORLD_AGENT = 'world';
+
+export const AGENTS = {
+  [DIALOGUE_AGENT]: {
+    name: '对话生成Agent',
+    description: '生成符合角色性格的对话',
+    prompt: '你是一个专业的网文对话生成专家。'
+  },
+  [DESCRIPTION_AGENT]: {
+    name: '环境描写Agent',
+    description: '生成场景氛围描写',
+    prompt: '你是一个专业的网文环境描写专家。'
+  },
+  [CONFLICT_AGENT]: {
+    name: '冲突设计Agent',
+    description: '设计剧情冲突',
+    prompt: '你是一个专业的网文冲突设计专家。'
+  },
+  [CHARACTER_AGENT]: {
+    name: '人物塑造Agent',
+    description: '生成人物设定',
+    prompt: '你是一个专业的网文人物塑造专家。'
+  },
+  [CHAPTER_AGENT]: {
+    name: '章节续写Agent',
+    description: '续写章节内容',
+    prompt: '你是一个专业的网文章节续写专家。'
+  },
+  [WORLD_AGENT]: {
+    name: '世界观生成Agent',
+    description: '生成世界观设定',
+    prompt: '你是一个专业的网文世界观设计专家。'
+  }
+};
+
 export interface Settings {
   apiKey: string;
   apiUrl: string;
