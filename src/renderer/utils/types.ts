@@ -22,7 +22,92 @@ export const PLOT_AGENT = 'plot';
 export const STYLE_ANALYSIS_AGENT = 'style';
 export const STYLE_LEARN_AGENT = 'style';
 
-export const AGENTS = {
+// 完整Agent定义（用于创建书籍时自动生成）
+export interface AgentDefinition {
+  systemPrompt: string;
+  generatePrompt: (channel: string, genre: string, tags: string[], ...args: any[]) => string;
+}
+
+export const AGENTS: Record<string, AgentDefinition> = {
+  [WORLD_AGENT]: {
+    systemPrompt: `你是一个专业的网文世界观设计专家。
+擅长设计完整的世界观体系，包括：
+1. 时代背景与社会结构
+2. 势力划分与派系争斗
+3. 世界运行规则（异能/修仙体系/科技等级等）
+4. 地理环境与势力分布
+5. 重要物品与道具设定
+6. 时间线与历史事件
+
+请输出一份完整、详细、逻辑自洽的世界观设定，适合直接用于网文创作。`,
+    generatePrompt: (channel: string, genre: string, tags: string[]) => `请为以下网文作品设计完整的世界观：
+
+- 频道：${channel === 'female' ? '女频' : '男频'}
+- 题材：${genre}
+- 标签：${tags.join('、')}
+
+请设计：
+1. 时代背景与社会结构
+2. 主要势力划分（至少3-5个势力）
+3. 世界运行规则（异能/修仙/科技等核心规则）
+4. 地理环境与重要地点
+5. 核心道具或物品设定
+6. 历史背景与关键事件`
+  },
+  [CHARACTER_AGENT]: {
+    systemPrompt: `你是一个专业的网文人物塑造专家。
+擅长设计立体、鲜活的人物角色，包括：
+1. 主角设定（基本信息、深层背景、行为特征、人物弧光）
+2. 配角设定（5-8名关键配角）
+3. 反派设定（动机、能力、冲突根源）
+
+请以JSON数组格式输出角色设定。`,
+    generatePrompt: (genre: string, theme: string, existingCharacters: any[]) => `请为以下网文作品设计人物角色：
+
+- 题材：${genre}
+- 主题：${theme}
+- 已有角色：${existingCharacters.length > 0 ? existingCharacters.map(c => c.name).join('、') : '无'}
+
+请设计：
+1. 主角（1名）：姓名、年龄、职业、性格、背景故事、人物弧光
+2. 关键配角（5-8名）：与主角的关系、性格特点、推动剧情的作用
+3. 反派/对立力量：动机、能力、与主角的核心矛盾
+
+请以JSON数组格式输出，每项包含：id, name, type(protag/ support/antag), age, occupation, personality(数组), background, motivation, fear, arc, relationships等字段。`
+  },
+  [PLOT_AGENT]: {
+    systemPrompt: `你是一个专业的网文剧情大纲设计专家。
+擅长设计三幕式故事结构：
+- 第一幕（25%）：日常世界→激励事件→第一次尝试→初步障碍
+- 第二幕（50%）：上升行动→中点转折→危机→绝望低谷→重整旗鼓
+- 第三幕（25%）：高潮对决→降落行动→尾声
+
+请输出完整的三幕式大纲，包含章节规划。`,
+    generatePrompt: (theme: string, characters: any[], chapterCount: number) => `请为以下网文作品设计三幕式剧情大纲：
+
+- 主题：${theme}
+- 主要角色：${characters.length > 0 ? characters.map(c => c.name).join('、') : '待生成'}
+- 计划章节数：${chapterCount}章
+
+请设计：
+1. 第一幕大纲（${Math.floor(chapterCount * 0.25)}章）
+2. 第二幕大纲（${Math.floor(chapterCount * 0.5)}章）
+3. 第三幕大纲（${Math.floor(chapterCount * 0.25)}章）
+4. 每幕的关键情节点与转折点
+5. 每章的节奏卡点（每200字一个小反转）`
+  }
+};
+
+// AGENTS兼容格式（保留原有用法）
+export const AGENT_PROMPTS = {
+  [DIALOGUE_AGENT]: '你是一个专业的网文对话生成专家。',
+  [DESCRIPTION_AGENT]: '你是一个专业的网文环境描写专家。',
+  [CONFLICT_AGENT]: '你是一个专业的网文冲突设计专家。',
+  [CHAPTER_AGENT]: '你是一个专业的网文章节续写专家。',
+  [STYLE_ANALYSIS_AGENT]: '你是一个专业的网文文风分析专家。'
+};
+
+export const AGENTS_LEGACY = {
   [DIALOGUE_AGENT]: {
     name: '对话生成Agent',
     description: '生成符合角色性格的对话',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Settings, Genre, GENRE_TEMPLATES, WORLDVIEW_AGENT, CHARACTER_AGENT, PLOT_AGENT } from '../utils/types';
+import { Book, Settings, Genre, GENRE_TEMPLATES, AGENTS } from '../utils/types';
 import { v4 as uuid } from 'uuid';
 
 interface CreateBookModalProps {
@@ -135,48 +135,60 @@ export default function CreateBookModal({ onClose, onCreate, settings }: CreateB
         updatedAt: Date.now(),
       };
 
+      // 检查API配置
+      if (!settings?.apiKey) {
+        setProgress('⚠️ 未配置API Key，将创建空白书籍');
+        setTimeout(() => {
+          setStep('complete');
+          setTimeout(() => onCreate(book), 1000);
+        }, 1500);
+        return;
+      }
+
+      // 获取Agent定义
+      const worldAgent = AGENTS['world'];
+      const charAgent = AGENTS['character'];
+      const plotAgent = AGENTS['plot'];
+
       setProgress('正在生成世界观设定...');
       
       // 生成世界观
-      if (settings?.apiKey) {
-        try {
-          const worldview = await window.api.ai.chat({
-            systemPrompt: WORLDVIEW_AGENT.systemPrompt,
-            userPrompt: WORLDVIEW_AGENT.generatePrompt(channel, selectedGenre, selectedTags),
-          });
-          book.settings.worldView = worldview;
-          setProgress('正在生成人物设定...');
-        } catch (e) {
-          console.error('世界观生成失败:', e);
-        }
+      try {
+        const worldview = await window.api.ai.chat({
+          systemPrompt: worldAgent.systemPrompt,
+          userPrompt: worldAgent.generatePrompt(channel, selectedGenre, selectedTags),
+        });
+        book.settings.worldView = worldview;
+        setProgress('✓ 世界观生成完成，正在生成人物设定...');
+      } catch (e) {
+        console.error('世界观生成失败:', e);
+        setProgress('⚠️ 世界观生成失败，继续生成人物...');
       }
 
       // 生成人物
-      if (settings?.apiKey) {
-        try {
-          const characters = await window.api.ai.chat({
-            systemPrompt: CHARACTER_AGENT.systemPrompt,
-            userPrompt: CHARACTER_AGENT.generatePrompt(selectedGenre, book.coreSetting.theme, []),
-          });
-          book.characters = JSON.parse(characters);
-          setProgress('正在生成剧情大纲...');
-        } catch (e) {
-          console.error('人物生成失败:', e);
-        }
+      try {
+        const characters = await window.api.ai.chat({
+          systemPrompt: charAgent.systemPrompt,
+          userPrompt: charAgent.generatePrompt(selectedGenre, book.coreSetting.theme, []),
+        });
+        book.characters = JSON.parse(characters);
+        setProgress('✓ 人物生成完成，正在生成剧情大纲...');
+      } catch (e) {
+        console.error('人物生成失败:', e);
+        setProgress('⚠️ 人物生成失败，继续生成大纲...');
       }
 
       // 生成剧情大纲
-      if (settings?.apiKey) {
-        try {
-          const plot = await window.api.ai.chat({
-            systemPrompt: PLOT_AGENT.systemPrompt,
-            userPrompt: PLOT_AGENT.generatePrompt(book.coreSetting.theme, book.characters, 50),
-          });
-          book.storyStructure.act1 = plot;
-          setProgress('创建完成！');
-        } catch (e) {
-          console.error('剧情生成失败:', e);
-        }
+      try {
+        const plot = await window.api.ai.chat({
+          systemPrompt: plotAgent.systemPrompt,
+          userPrompt: plotAgent.generatePrompt(book.coreSetting.theme, book.characters, 50),
+        });
+        book.storyStructure.act1 = plot;
+        setProgress('✓ 剧情大纲生成完成！');
+      } catch (e) {
+        console.error('剧情生成失败:', e);
+        setProgress('⚠️ 剧情大纲生成失败');
       }
 
       setStep('complete');

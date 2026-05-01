@@ -27,7 +27,7 @@ export default function SettingsPage({ onSave }: SettingsPageProps) {
 
   // 保存设置
   const handleSave = async () => {
-    await window.api.settings.save(settings);
+    await window.api.settings.set(settings);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     onSave(settings);
