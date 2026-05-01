@@ -11,7 +11,15 @@ export interface Genre {
   id: string;
   name: string;
   channel: 'female' | 'male';
-  category: string;
+  description?: string;
+  tags?: string[];
+  category?: string;
+  writingRules?: {
+    perspective?: string;
+    paragraphLimit?: number;
+    wordCountPerChapter?: number;
+    emotionalPattern?: string[];
+  };
 }
 
 export interface Character {
@@ -67,6 +75,39 @@ export interface NovelStyle {
   createdAt: number;
 }
 
+// 剧情线
+export interface PlotLine {
+  id: string;
+  name: string;
+  points: {
+    id: string;
+    title: string;
+    chapter: number;
+    status: 'pending' | 'in-progress' | 'completed';
+  }[];
+}
+
+// 未回收伏笔
+export interface UnresolvedPlot {
+  id: string;
+  description: string;
+  chapter: number;
+  status: 'pending' | 'resolved';
+}
+
+// 三幕结构
+export interface ActStructure {
+  name: string;
+  chapters: number[];
+  description: string;
+}
+
+// 文风画像
+export interface StyleProfile {
+  samples: string[];
+  lastUpdated: number;
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -75,6 +116,19 @@ export interface Book {
   channel: 'female' | 'male';
   tags: string[];
   synopsis: string;
+  
+  // 剧情线
+  plotLines?: PlotLine[];
+  unresolvedPlots?: UnresolvedPlot[];
+  acts?: {
+    act1: ActStructure;
+    act2: ActStructure;
+    act3: ActStructure;
+  };
+  lastChapterContext?: string;
+  
+  // 文风画像
+  styleProfile?: StyleProfile;
   
   // 核心设定模块
   coreSetting: {
