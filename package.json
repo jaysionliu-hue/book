@@ -2,7 +2,7 @@
   "name": "webnovel-studio-v2",
   "version": "1.0.0",
   "description": "专业网文创作工作室 - AI智能辅助长线创作",
-  "main": "dist/main/index.js",
+  "main": "dist/main/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
@@ -22,6 +22,7 @@
       "dist/**/*",
       "package.json"
     ],
+    "asar": true,
     "win": {
       "target": "dir"
     }
