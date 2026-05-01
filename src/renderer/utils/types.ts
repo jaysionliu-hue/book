@@ -273,7 +273,9 @@ export async function callDeepSeek(settings: Settings, systemPrompt: string, use
   return data.choices[0]?.message?.content || '';
 }
 
-// DeepSeek API 调用
+// ============ 题材模板 ============
+
+export const GENRE_TEMPLATES: Record<string, any> = {
   female: {
     urban: {
       name: '现代都市',
