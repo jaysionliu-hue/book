@@ -17,6 +17,10 @@ export const CONFLICT_AGENT = 'conflict';
 export const CHARACTER_AGENT = 'character';
 export const CHAPTER_AGENT = 'chapter';
 export const WORLD_AGENT = 'world';
+export const WORLDVIEW_AGENT = 'world';  // 别名
+export const PLOT_AGENT = 'plot';
+export const STYLE_ANALYSIS_AGENT = 'style';
+export const STYLE_LEARN_AGENT = 'style';
 
 export const AGENTS = {
   [DIALOGUE_AGENT]: {
@@ -48,6 +52,16 @@ export const AGENTS = {
     name: '世界观生成Agent',
     description: '生成世界观设定',
     prompt: '你是一个专业的网文世界观设计专家。'
+  },
+  [PLOT_AGENT]: {
+    name: '剧情大纲Agent',
+    description: '生成剧情大纲',
+    prompt: '你是一个专业的网文剧情大纲设计专家。'
+  },
+  [STYLE_ANALYSIS_AGENT]: {
+    name: '文风分析Agent',
+    description: '分析文风特点',
+    prompt: '你是一个专业的网文文风分析专家。'
   }
 };
 
