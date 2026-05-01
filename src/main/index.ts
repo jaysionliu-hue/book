@@ -185,7 +185,7 @@ ipcMain.handle('ai:chat', async (_, { systemPrompt, userPrompt }) => {
       throw new Error(`API调用失败: ${response.status} - ${error}`)
     }
 
-    const data = await response.json()
+    const data: any = await response.json()
     return data.choices[0]?.message?.content || ''
   } catch (error: any) {
     throw new Error(error.message || 'AI调用失败')
