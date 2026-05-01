@@ -156,38 +156,45 @@ ipcMain.handle('books:getCurrent', () => {
 
 // DeepSeek API 调用
 ipcMain.handle('ai:chat', async (_, { systemPrompt, userPrompt }) => {
-  const settings = store.get('settings') as any
+  const settings = store.get('settings') as any || {}
   
-  if (!settings.apiKey) {
+  if (!settings.apiKey || settings.apiKey.trim() === '') {
     throw new Error('请先在设置中配置DeepSeek API Key')
   }
 
   try {
-    const response = await fetch(`${settings.apiUrl}/chat/completions`, {
+    const apiUrl = settings.apiUrl || 'https://api.deepseek.com'
+    const model = settings.model || 'deepseek-chat'
+    const maxTokens = settings.maxTokens || 2000
+    const temperature = settings.temperature ?? 0.7
+    
+    const response = await fetch(`${apiUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${settings.apiKey}`
       },
       body: JSON.stringify({
-        model: settings.model || 'deepseek-chat',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        max_tokens: settings.maxTokens || 2000,
-        temperature: settings.temperature || 0.7
+        max_tokens: maxTokens,
+        temperature
       })
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`API调用失败: ${response.status} - ${error}`)
+      const errorText = await response.text()
+      console.error('DeepSeek API Error:', response.status, errorText)
+      throw new Error(`API调用失败: ${response.status}`)
     }
 
     const data: any = await response.json()
     return data.choices[0]?.message?.content || ''
   } catch (error: any) {
+    console.error('AI调用错误:', error)
     throw new Error(error.message || 'AI调用失败')
   }
 })
