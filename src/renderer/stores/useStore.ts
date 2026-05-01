@@ -153,16 +153,16 @@ export const useStore = create<Store>((set, get) => ({
   },
   
   createBook: async (bookData) => {
-    const now = Date.now()
     const book = {
-      ...bookData,
-      id: `book_${now}`,
-      created_at: now,
-      updated_at: now
+      name: bookData.name,
+      channel: bookData.channel,
+      genre: bookData.genre,
+      tags: bookData.tags,
+      summary: bookData.summary || '',
     }
-    await window.api.books.create(book)
+    const created = await window.api.books.create(book)
     await get().loadBooks()
-    set({ currentBook: book })
+    set({ currentBook: created || { ...book, id: `book_${Date.now()}`, created_at: Date.now(), updated_at: Date.now() } })
   },
   
   deleteBook: async (id) => {
