@@ -2,7 +2,7 @@
   "name": "webnovel-studio",
   "version": "1.0.0",
   "description": "网文创作工作室 - 专业网文创作管理工具",
-  "main": "dist/main/index.js",
+  "main": "dist/main/main/index.js",
   "scripts": {
     "dev": "vite",
     "build:vite": "vite build",
@@ -44,7 +44,7 @@
       "package.json"
     ],
     "extraMetadata": {
-      "main": "dist/main/index.js"
+      "main": "dist/main/main/index.js"
     },
     "win": {
       "target": [
