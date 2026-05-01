@@ -24,7 +24,9 @@ contextBridge.exposeInMainWorld('api', {
     update: (id: string, data: any) => ipcRenderer.invoke('books:update', id, data),
     delete: (id: string) => ipcRenderer.invoke('books:delete', id),
     setCurrent: (id: string) => ipcRenderer.invoke('books:setCurrent', id),
-    getCurrent: () => ipcRenderer.invoke('books:getCurrent')
+    getCurrent: () => ipcRenderer.invoke('books:getCurrent'),
+    openFolder: (id: string) => ipcRenderer.invoke('books:openFolder', id),
+    getPath: (id: string) => ipcRenderer.invoke('books:getPath', id)
   },
 
   // AI调用

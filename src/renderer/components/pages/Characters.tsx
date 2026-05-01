@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Book, Character, CHARACTER_AGENT } from '../../utils/types';
+import { Book, Character, AGENTS } from '../../utils/types';
 
 interface CharactersProps {
   book: Book;
@@ -96,8 +96,8 @@ export default function Characters({ book, onUpdate, settings }: CharactersProps
 
     try {
       const generated = await window.api.ai.chat({
-        systemPrompt: CHARACTER_AGENT.systemPrompt,
-        userPrompt: CHARACTER_AGENT.generatePrompt(book.genreName, book.coreSetting?.theme || '', characters),
+        systemPrompt: AGENTS['character'].systemPrompt,
+        userPrompt: AGENTS['character'].generatePrompt(book.genreName, book.coreSetting?.theme || '', characters),
       });
 
       try {

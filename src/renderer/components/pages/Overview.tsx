@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Book, WORLDVIEW_AGENT, CHARACTER_AGENT, PLOT_AGENT, CHAPTER_AGENT } from '../../utils/types';
+import { Book, AGENTS } from '../../utils/types';
 
 interface OverviewProps {
   book: Book;
@@ -10,6 +10,12 @@ interface OverviewProps {
 export default function Overview({ book, onUpdate, settings }: OverviewProps) {
   const [activeTab, setActiveTab] = useState<'setting' | 'story' | 'rules'>('setting');
   const [generating, setGenerating] = useState<string | null>(null);
+
+  // 打开书籍文件夹
+  const handleOpenFolder = async () => {
+    const folderPath = await window.api.books.getPath(book.id);
+    await window.api.books.openFolder(book.id);
+  };
 
   // AI生成内容
   const handleGenerate = async (type: string) => {
@@ -26,8 +32,8 @@ export default function Overview({ book, onUpdate, settings }: OverviewProps) {
       switch (type) {
         case 'worldview':
           content = await window.api.ai.chat({
-            systemPrompt: WORLDVIEW_AGENT.systemPrompt,
-            userPrompt: WORLDVIEW_AGENT.generatePrompt(book.channel, book.genreName, book.tags),
+            systemPrompt: AGENTS['world'].systemPrompt,
+            userPrompt: AGENTS['world'].generatePrompt(book.channel, book.genreName, book.tags),
           });
           onUpdate({
             settings: { ...book.settings, worldView: content },
@@ -36,8 +42,8 @@ export default function Overview({ book, onUpdate, settings }: OverviewProps) {
 
         case 'characters':
           content = await window.api.ai.chat({
-            systemPrompt: CHARACTER_AGENT.systemPrompt,
-            userPrompt: CHARACTER_AGENT.generatePrompt(book.genreName, book.coreSetting?.theme || '', book.characters),
+            systemPrompt: AGENTS['character'].systemPrompt,
+            userPrompt: AGENTS['character'].generatePrompt(book.genreName, book.coreSetting?.theme || '', book.characters),
           });
           try {
             const chars = JSON.parse(content);
@@ -54,8 +60,8 @@ export default function Overview({ book, onUpdate, settings }: OverviewProps) {
 
         case 'plot':
           content = await window.api.ai.chat({
-            systemPrompt: PLOT_AGENT.systemPrompt,
-            userPrompt: PLOT_AGENT.generatePrompt(book.coreSetting?.theme || '', book.characters, 50),
+            systemPrompt: AGENTS['plot'].systemPrompt,
+            userPrompt: AGENTS['plot'].generatePrompt(book.coreSetting?.theme || '', book.characters, 50),
           });
           onUpdate({
             storyStructure: { ...book.storyStructure, act1: content },
@@ -74,6 +80,23 @@ export default function Overview({ book, onUpdate, settings }: OverviewProps) {
 
   return (
     <div className="space-y-6">
+      {/* 书籍信息栏 */}
+      <div className="bg-slate-800 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">《{book.title}》</h2>
+          <p className="text-sm text-gray-400">
+            {book.channel === 'female' ? '女频' : '男频'} · {book.genreName} · {book.totalWordCount || 0}字
+          </p>
+        </div>
+        <button
+          onClick={handleOpenFolder}
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm flex items-center gap-2"
+        >
+          <span>📁</span>
+          打开文件夹
+        </button>
+      </div>
+
       {/* 核心设定 */}
       <section className="bg-slate-800 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">

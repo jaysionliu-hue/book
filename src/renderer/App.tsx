@@ -34,6 +34,8 @@ declare global {
         delete: (id: string) => Promise<boolean>;
         setCurrent: (id: string) => Promise<boolean>;
         getCurrent: () => Promise<Book | null>;
+        openFolder: (id: string) => Promise<string>;
+        getPath: (id: string) => Promise<string>;
       };
       ai: {
         chat: (params: { systemPrompt: string; userPrompt: string }) => Promise<string>;
