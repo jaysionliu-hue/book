@@ -1,174 +1,199 @@
-import { useState } from 'react'
-import { useStore } from '../../stores/useStore'
+import React, { useState } from 'react';
+import { Book, STYLE_ANALYSIS_AGENT } from '../../utils/types';
 
-export default function Style() {
-  const { styleProfile, addStyleSample, saveStyleProfile } = useStore()
-  const [newSample, setNewSample] = useState('')
-  const [showAddSample, setShowAddSample] = useState(false)
-  
-  const handleAddSample = async () => {
-    if (!newSample.trim()) return
-    await addStyleSample(newSample)
-    setNewSample('')
-    setShowAddSample(false)
-  }
-  
-  const handleDeleteSample = (index: number) => {
-    const newSamples = styleProfile.samples.filter((_, i) => i !== index)
-    saveStyleProfile({ ...styleProfile, samples: newSamples })
-  }
-  
-  const profile = styleProfile.profile
-  
+interface StyleProps {
+  book: Book;
+  onUpdate: (data: Partial<Book>) => void;
+  settings?: any;
+}
+
+interface StyleSample {
+  id: string;
+  content: string;
+  analysis?: {
+    sentenceLength: string;
+    shortSentence: number;
+    connectors: string[];
+    punctuation: string[];
+    tone: string[];
+  };
+}
+
+export default function Style({ book, onUpdate, settings }: StyleProps) {
+  const [samples, setSamples] = useState<StyleSample[]>(book.samples || []);
+  const [newContent, setNewContent] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<string | null>(null);
+
+  // 分析文风
+  const handleAnalyze = async () => {
+    if (!newContent.trim()) return;
+
+    if (!settings?.apiKey) {
+      alert('请先在设置中配置DeepSeek API');
+      return;
+    }
+
+    setAnalyzing(true);
+
+    try {
+      const analysis = await window.api.ai.chat({
+        systemPrompt: STYLE_ANALYSIS_AGENT.systemPrompt,
+        userPrompt: STYLE_ANALYSIS_AGENT.generatePrompt(newContent),
+      });
+
+      const sample: StyleSample = {
+        id: Date.now().toString(),
+        content: newContent,
+        analysis: JSON.parse(analysis),
+      };
+
+      const updated = [...samples, sample];
+      setSamples(updated);
+      setNewContent('');
+      onUpdate({ samples: updated });
+    } catch (error: any) {
+      alert('分析失败: ' + (error.message || '未知错误'));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // 删除样本
+  const handleDelete = (id: string) => {
+    const updated = samples.filter((s) => s.id !== id);
+    setSamples(updated);
+    onUpdate({ samples: updated });
+    if (selectedSample === id) setSelectedSample(null);
+  };
+
+  // 应用文风
+  const handleApply = (sample: StyleSample) => {
+    onUpdate({
+      style: {
+        sentenceLength: sample.analysis?.sentenceLength || '中等',
+        shortSentence: sample.analysis?.shortSentence || 0.3,
+        connectors: sample.analysis?.connectors || [],
+        punctuation: sample.analysis?.punctuation || [],
+        tone: sample.analysis?.tone || [],
+      },
+    });
+    alert('文风已应用');
+  };
+
   return (
-    <div className="p-6">
-      <h3 className="text-lg font-bold mb-4">文风学习库</h3>
-      
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left: Sample Management */}
-        <div className="col-span-2">
-          <div className="bg-white border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="font-medium">文风样本</h4>
-              <button
-                onClick={() => setShowAddSample(true)}
-                className="px-3 py-1 bg-primary-600 text-white text-sm rounded hover:bg-primary-500"
-              >
-                + 添加样本
-              </button>
-            </div>
-            
-            {showAddSample && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <textarea
-                  value={newSample}
-                  onChange={(e) => setNewSample(e.target.value)}
-                  placeholder="粘贴你的原创作品片段，用于学习文风特征..."
-                  className="w-full h-32 p-3 border rounded resize-none focus:ring-2 focus:ring-primary-500 text-sm"
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={handleAddSample}
-                    disabled={!newSample.trim()}
-                    className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500 disabled:bg-gray-300"
-                  >
-                    学习此样本
-                  </button>
-                  <button
-                    onClick={() => { setShowAddSample(false); setNewSample('') }}
-                    className="px-4 py-2 border rounded hover:bg-gray-100"
-                  >
-                    取消
-                  </button>
-                </div>
+    <div className="flex gap-6 h-full">
+      {/* 样本列表 */}
+      <div className="w-80 bg-slate-800 rounded-xl p-4 overflow-y-auto">
+        <h2 className="font-semibold mb-4">文风样本库</h2>
+
+        <div className="space-y-2">
+          {samples.map((sample) => (
+            <div
+              key={sample.id}
+              className={`p-3 bg-slate-700/50 rounded-lg cursor-pointer transition ${
+                selectedSample === sample.id ? 'ring-2 ring-blue-500' : ''
+              } hover:bg-slate-700`}
+              onClick={() => setSelectedSample(sample.id)}
+            >
+              <div className="text-sm line-clamp-2">{sample.content.slice(0, 100)}...</div>
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleApply(sample); }}
+                  className="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  应用
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(sample.id); }}
+                  className="text-xs text-red-400 hover:text-red-300"
+                >
+                  删除
+                </button>
               </div>
-            )}
-            
-            <div className="space-y-3">
-              {styleProfile.samples.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <div className="text-4xl mb-2">✍️</div>
-                  <p>暂无文风样本</p>
-                  <p className="text-sm mt-1">添加你的原创片段，系统将自动分析文风特征</p>
-                </div>
-              ) : (
-                styleProfile.samples.map((sample, index) => (
-                  <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs text-gray-400">样本 {index + 1}</span>
-                      <button
-                        onClick={() => handleDeleteSample(index)}
-                        className="text-xs text-red-500 hover:bg-red-100 px-2 py-1 rounded"
-                      >
-                        删除
-                      </button>
-                    </div>
-                    <div className="text-sm text-gray-700 line-clamp-3">{sample}</div>
-                  </div>
-                ))
-              )}
             </div>
-          </div>
+          ))}
         </div>
-        
-        {/* Right: Style Profile */}
-        <div>
-          <div className="bg-white border rounded-lg p-4">
-            <h4 className="font-medium mb-4">文风特征分析</h4>
-            
-            {styleProfile.samples.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">📊</div>
-                <p className="text-sm">添加样本后自动分析</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="text-center p-4 bg-primary-50 rounded-lg">
-                  <div className="text-3xl font-bold text-primary-600">{profile.avgSentenceLength}</div>
-                  <div className="text-sm text-gray-600">平均句长</div>
-                </div>
-                
-                <div>
-                  <div className="text-sm text-gray-500 mb-1">短句比例</div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-primary-500 h-2 rounded-full"
-                        style={{ width: `${profile.shortSentenceRatio * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium">{Math.round(profile.shortSentenceRatio * 100)}%</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="text-sm text-gray-500 mb-2">常用连接词</div>
-                  <div className="flex flex-wrap gap-1">
-                    {profile.connectors.length > 0 ? (
-                      profile.connectors.map((c, i) => (
-                        <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{c}</span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-gray-400">暂无数据</span>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="text-sm text-gray-500 mb-2">语气助词</div>
-                  <div className="flex flex-wrap gap-1">
-                    {profile.particles.length > 0 ? (
-                      profile.particles.map((p, i) => (
-                        <span key={i} className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs">{p}</span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-gray-400">暂无数据</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+
+        {samples.length === 0 && (
+          <div className="text-center text-gray-400 py-8">
+            <p>暂无文风样本</p>
+            <p className="text-sm mt-1">粘贴你的原创内容开始学习</p>
           </div>
-          
-          {/* Writing Tips */}
-          <div className="bg-white border rounded-lg p-4 mt-4">
-            <h4 className="font-medium mb-3">写作提示</h4>
-            <div className="text-sm text-gray-600 space-y-2">
-              <p>根据文风分析，在创作时应：</p>
-              <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>保持句子长度在 {Math.max(0, profile.avgSentenceLength - 5)}-{profile.avgSentenceLength + 5} 字左右</li>
-                <li>适当使用短句增加节奏感</li>
-                {profile.connectors.length > 0 && (
-                  <li>自然融入连接词：{profile.connectors.slice(0, 3).join('、')}</li>
-                )}
-                {profile.particles.length > 0 && (
-                  <li>使用语气词增加人物特色</li>
-                )}
-              </ul>
+        )}
+      </div>
+
+      {/* 主内容 */}
+      <div className="flex-1 space-y-6">
+        {/* 添加新样本 */}
+        <section className="bg-slate-800 rounded-xl p-6">
+          <h2 className="text-lg font-semibold mb-4">添加文风样本</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            粘贴你的原创小说片段，系统将自动分析并学习你的写作风格
+          </p>
+
+          <textarea
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            placeholder="粘贴你的原创小说片段（建议200字以上）..."
+            rows={6}
+            className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none resize-none"
+          />
+
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing || !newContent.trim()}
+            className="mt-4 px-6 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg disabled:opacity-50 transition"
+          >
+            {analyzing ? '分析中...' : '✨ 深度分析文风'}
+          </button>
+        </section>
+
+        {/* 当前文风 */}
+        {book.style && (
+          <section className="bg-slate-800 rounded-xl p-6">
+            <h2 className="text-lg font-semibold mb-4">当前锁定文风</h2>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-700/50 rounded-lg">
+                <div className="text-sm text-gray-400">句式偏好</div>
+                <div className="text-lg font-medium mt-1">{book.style.sentenceLength}</div>
+              </div>
+              <div className="p-4 bg-slate-700/50 rounded-lg">
+                <div className="text-sm text-gray-400">短句比例</div>
+                <div className="text-lg font-medium mt-1">{(book.style.shortSentence * 100).toFixed(0)}%</div>
+              </div>
+              <div className="col-span-2 p-4 bg-slate-700/50 rounded-lg">
+                <div className="text-sm text-gray-400 mb-2">语气特征</div>
+                <div className="flex flex-wrap gap-2">
+                  {book.style.tone?.map((t, i) => (
+                    <span key={i} className="px-2 py-1 bg-blue-500/30 rounded text-sm">{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="col-span-2 p-4 bg-slate-700/50 rounded-lg">
+                <div className="text-sm text-gray-400 mb-2">常用连接词</div>
+                <div className="flex flex-wrap gap-2">
+                  {book.style.connectors?.map((c, i) => (
+                    <span key={i} className="px-2 py-1 bg-purple-500/30 rounded text-sm">{c}</span>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </section>
+        )}
+
+        {/* 文风分析说明 */}
+        <section className="bg-slate-800/50 rounded-xl p-4 text-sm text-gray-400">
+          <h3 className="font-medium text-white mb-2">文风学习说明</h3>
+          <ul className="list-disc list-inside space-y-1">
+            <li>粘贴越多原创内容，分析越准确</li>
+            <li>分析内容包括：句式长短、连接词、语气词、标点习惯等</li>
+            <li>应用文风后，AI创作将自动贴合你的写作风格</li>
+            <li>支持添加多个样本，随时可以切换</li>
+          </ul>
+        </section>
       </div>
     </div>
-  )
+  );
 }

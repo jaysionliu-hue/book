@@ -1,213 +1,218 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
-import path from 'path';
-import store, { generateId } from './database';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs'
+import Store from 'electron-store'
 
-let mainWindow: BrowserWindow | null = null;
+// 初始化存储
+const store = new Store({
+  name: 'webnovel-studio-data',
+  defaults: {
+    settings: {
+      apiKey: '',
+      apiUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      maxTokens: 2000,
+      temperature: 0.7
+    },
+    genres: [
+      // 女频
+      { id: 'female-urban', name: '现代都市', channel: 'female', category: 'urban' },
+      { id: 'female-sweet', name: '现代甜宠', channel: 'female', category: 'urban' },
+      { id: 'female-bitter', name: '现代虐恋', channel: 'female', category: 'urban' },
+      { id: 'female-ceo', name: '豪门总裁', channel: 'female', category: 'urban' },
+      { id: 'female-ancient', name: '古言', channel: 'female', category: 'ancient' },
+      { id: 'female-palace', name: '宫斗', channel: 'female', category: 'ancient' },
+      { id: 'female-xianxia', name: '仙侠', channel: 'female', category: 'fantasy' },
+      { id: 'female-mystery', name: '悬疑', channel: 'female', category: 'suspense' },
+      // 男频
+      { id: 'male-urban', name: '都市', channel: 'male', category: 'urban' },
+      { id: 'male-fantasy', name: '玄幻', channel: 'male', category: 'fantasy' },
+      { id: 'male-xuanhuan', name: '玄幻奇幻', channel: 'male', category: 'fantasy' },
+      { id: 'male-game', name: '游戏', channel: 'male', category: 'game' },
+      { id: 'male-sci-fi', name: '科幻', channel: 'male', category: 'scifi' },
+      { id: 'male-martial', name: '武侠', channel: 'male', category: 'martial' }
+    ],
+    books: [],
+    currentBookId: null
+  }
+})
 
-const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1200,
+    minWidth: 1000,
     minHeight: 700,
-    title: '网文创作工作室',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     },
-    show: false
-  });
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#0f172a'
+  })
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
-
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+  // 开发模式加载本地服务器
+  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
+    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
   mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+    mainWindow = null
+  })
 }
 
-// IPC Handlers - Books
-ipcMain.handle('book:getAll', () => store.get('books'));
-ipcMain.handle('book:get', (_, id: string) => {
-  const books = store.get('books') as any[];
-  return books.find(b => b.id === id);
-});
-ipcMain.handle('book:create', (_, data: any) => {
-  const books = store.get('books') as any[];
-  const newBook = { ...data, id: generateId(), createdAt: Date.now(), updatedAt: Date.now() };
-  books.push(newBook);
-  store.set('books', books);
-  return newBook;
-});
-ipcMain.handle('book:update', (_, id: string, data: any) => {
-  const books = store.get('books') as any[];
-  const index = books.findIndex(b => b.id === id);
-  if (index !== -1) {
-    books[index] = { ...books[index], ...data, updatedAt: Date.now() };
-    store.set('books', books);
-    return books[index];
+app.whenReady().then(createWindow)
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
   }
-  return null;
-});
-ipcMain.handle('book:delete', (_, id: string) => {
-  const books = store.get('books') as any[];
-  store.set('books', books.filter(b => b.id !== id));
-  return true;
-});
-ipcMain.handle('book:setCurrent', (_, id: string | null) => {
-  store.set('currentBookId', id);
-  return true;
-});
-ipcMain.handle('book:getCurrent', () => store.get('currentBookId'));
+})
 
-// IPC Handlers - Chapters
-ipcMain.handle('chapter:getAll', (_, bookId: string) => {
-  const chapters = store.get('chapters') as any[];
-  return chapters.filter(c => c.bookId === bookId);
-});
-ipcMain.handle('chapter:create', (_, data: any) => {
-  const chapters = store.get('chapters') as any[];
-  const newChapter = { ...data, id: generateId(), createdAt: Date.now(), updatedAt: Date.now() };
-  chapters.push(newChapter);
-  store.set('chapters', chapters);
-  return newChapter;
-});
-ipcMain.handle('chapter:update', (_, id: string, data: any) => {
-  const chapters = store.get('chapters') as any[];
-  const index = chapters.findIndex(c => c.id === id);
-  if (index !== -1) {
-    chapters[index] = { ...chapters[index], ...data, updatedAt: Date.now() };
-    store.set('chapters', chapters);
-    return chapters[index];
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
   }
-  return null;
-});
-ipcMain.handle('chapter:delete', (_, id: string) => {
-  const chapters = store.get('chapters') as any[];
-  store.set('chapters', chapters.filter(c => c.id !== id));
-  return true;
-});
+})
 
-// IPC Handlers - Characters
-ipcMain.handle('character:getAll', (_, bookId: string) => {
-  const characters = store.get('characters') as any[];
-  return characters.filter(c => c.bookId === bookId);
-});
-ipcMain.handle('character:create', (_, data: any) => {
-  const characters = store.get('characters') as any[];
-  const newCharacter = { ...data, id: generateId() };
-  characters.push(newCharacter);
-  store.set('characters', characters);
-  return newCharacter;
-});
-ipcMain.handle('character:update', (_, id: string, data: any) => {
-  const characters = store.get('characters') as any[];
-  const index = characters.findIndex(c => c.id === id);
+// ============ IPC 处理 ============
+
+// 设置相关
+ipcMain.handle('settings:get', () => store.get('settings'))
+ipcMain.handle('settings:set', (_, settings) => {
+  store.set('settings', settings)
+  return true
+})
+
+// 题材相关
+ipcMain.handle('genres:list', () => store.get('genres'))
+ipcMain.handle('genres:add', (_, genre) => {
+  const genres = store.get('genres') as any[]
+  genres.push(genre)
+  store.set('genres', genres)
+  return true
+})
+ipcMain.handle('genres:update', (_, id, data) => {
+  const genres = store.get('genres') as any[]
+  const index = genres.findIndex((g: any) => g.id === id)
   if (index !== -1) {
-    characters[index] = { ...characters[index], ...data };
-    store.set('characters', characters);
-    return characters[index];
+    genres[index] = { ...genres[index], ...data }
+    store.set('genres', genres)
   }
-  return null;
-});
-ipcMain.handle('character:delete', (_, id: string) => {
-  const characters = store.get('characters') as any[];
-  store.set('characters', characters.filter(c => c.id !== id));
-  return true;
-});
+  return true
+})
+ipcMain.handle('genres:delete', (_, id) => {
+  const genres = store.get('genres') as any[]
+  store.set('genres', genres.filter((g: any) => g.id !== id))
+  return true
+})
 
-// IPC Handlers - Plots
-ipcMain.handle('plot:getAll', (_, bookId: string) => {
-  const plots = store.get('plots') as any[];
-  return plots.filter(p => p.bookId === bookId);
-});
-ipcMain.handle('plot:create', (_, data: any) => {
-  const plots = store.get('plots') as any[];
-  const newPlot = { ...data, id: generateId() };
-  plots.push(newPlot);
-  store.set('plots', plots);
-  return newPlot;
-});
-ipcMain.handle('plot:update', (_, id: string, data: any) => {
-  const plots = store.get('plots') as any[];
-  const index = plots.findIndex(p => p.id === id);
+// 书籍相关
+ipcMain.handle('books:list', () => store.get('books'))
+ipcMain.handle('books:create', (_, book) => {
+  const books = store.get('books') as any[]
+  books.push(book)
+  store.set('books', books)
+  store.set('currentBookId', book.id)
+  return book
+})
+ipcMain.handle('books:get', (_, id) => {
+  const books = store.get('books') as any[]
+  return books.find((b: any) => b.id === id)
+})
+ipcMain.handle('books:update', (_, id, data) => {
+  const books = store.get('books') as any[]
+  const index = books.findIndex((b: any) => b.id === id)
   if (index !== -1) {
-    plots[index] = { ...plots[index], ...data };
-    store.set('plots', plots);
-    return plots[index];
+    books[index] = { ...books[index], ...data, updated_at: Date.now() }
+    store.set('books', books)
   }
-  return null;
-});
-ipcMain.handle('plot:delete', (_, id: string) => {
-  const plots = store.get('plots') as any[];
-  store.set('plots', plots.filter(p => p.id !== id));
-  return true;
-});
-
-// IPC Handlers - World Settings
-ipcMain.handle('world:getAll', (_, bookId: string) => {
-  const settings = store.get('worldSettings') as any[];
-  return settings.filter(s => s.bookId === bookId);
-});
-ipcMain.handle('world:create', (_, data: any) => {
-  const settings = store.get('worldSettings') as any[];
-  const newSetting = { ...data, id: generateId() };
-  settings.push(newSetting);
-  store.set('worldSettings', settings);
-  return newSetting;
-});
-ipcMain.handle('world:update', (_, id: string, data: any) => {
-  const settings = store.get('worldSettings') as any[];
-  const index = settings.findIndex(s => s.id === id);
-  if (index !== -1) {
-    settings[index] = { ...settings[index], ...data };
-    store.set('worldSettings', settings);
-    return settings[index];
+  return books[index]
+})
+ipcMain.handle('books:delete', (_, id) => {
+  const books = store.get('books') as any[]
+  store.set('books', books.filter((b: any) => b.id !== id))
+  if (store.get('currentBookId') === id) {
+    store.set('currentBookId', null)
   }
-  return null;
-});
-ipcMain.handle('world:delete', (_, id: string) => {
-  const settings = store.get('worldSettings') as any[];
-  store.set('worldSettings', settings.filter(s => s.id !== id));
-  return true;
-});
+  return true
+})
+ipcMain.handle('books:setCurrent', (_, id) => {
+  store.set('currentBookId', id)
+  return true
+})
+ipcMain.handle('books:getCurrent', () => {
+  const currentId = store.get('currentBookId')
+  if (!currentId) return null
+  const books = store.get('books') as any[]
+  return books.find((b: any) => b.id === currentId)
+})
 
-// IPC Handlers - Style Samples
-ipcMain.handle('style:getAll', (_, bookId: string) => {
-  const samples = store.get('styleSamples') as any[];
-  return samples.filter(s => s.bookId === bookId);
-});
-ipcMain.handle('style:create', (_, data: any) => {
-  const samples = store.get('styleSamples') as any[];
-  const newSample = { ...data, id: generateId() };
-  samples.push(newSample);
-  store.set('styleSamples', samples);
-  return newSample;
-});
-ipcMain.handle('style:delete', (_, id: string) => {
-  const samples = store.get('styleSamples') as any[];
-  store.set('styleSamples', samples.filter(s => s.id !== id));
-  return true;
-});
+// DeepSeek API 调用
+ipcMain.handle('ai:chat', async (_, { systemPrompt, userPrompt }) => {
+  const settings = store.get('settings') as any
+  
+  if (!settings.apiKey) {
+    throw new Error('请先在设置中配置DeepSeek API Key')
+  }
 
-// IPC Handlers - API Config
-ipcMain.handle('api:getConfig', () => store.get('apiConfig'));
-ipcMain.handle('api:updateConfig', (_, config: any) => {
-  store.set('apiConfig', config);
-  return true;
-});
+  try {
+    const response = await fetch(`${settings.apiUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.apiKey}`
+      },
+      body: JSON.stringify({
+        model: settings.model || 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: settings.maxTokens || 2000,
+        temperature: settings.temperature || 0.7
+      })
+    })
 
-app.whenReady().then(() => {
-  createWindow();
-});
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`API调用失败: ${response.status} - ${error}`)
+    }
+
+    const data = await response.json()
+    return data.choices[0]?.message?.content || ''
+  } catch (error: any) {
+    throw new Error(error.message || 'AI调用失败')
+  }
+})
+
+// 文件选择
+ipcMain.handle('dialog:openFile', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      { name: '文本文件', extensions: ['txt', 'md'] }
+    ]
+  })
+  if (result.canceled) return null
+  return fs.readFileSync(result.filePaths[0], 'utf-8')
+})
+
+// 保存文件
+ipcMain.handle('file:save', async (_, { filename, content }) => {
+  const result = await dialog.showSaveDialog({
+    defaultPath: filename,
+    filters: [
+      { name: '文本文件', extensions: ['txt', 'md'] }
+    ]
+  })
+  if (result.canceled || !result.filePath) return false
+  fs.writeFileSync(result.filePath, content, 'utf-8')
+  return true
+})

@@ -1,178 +1,224 @@
-import { useState } from 'react'
-import { useStore } from '../../stores/useStore'
+import React, { useState } from 'react';
+import { Book, Chapter, CHAPTER_AGENT } from '../../utils/types';
 
-export default function Chapters() {
-  const { chapters, createChapter, updateChapter, deleteChapter, currentBook, wordCountTarget } = useStore()
-  const [editingChapter, setEditingChapter] = useState<any>(null)
-  const [showNewChapter, setShowNewChapter] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  
-  const handleCreateChapter = async () => {
-    if (!newTitle.trim()) return
-    const order = chapters.length + 1
-    await createChapter({
-      book_id: currentBook!.id,
-      title: newTitle,
-      content: '',
-      chapter_order: order,
-      status: 'draft',
-    })
-    setNewTitle('')
-    setShowNewChapter(false)
-  }
-  
-  const handleSaveChapter = async () => {
-    if (!editingChapter) return
-    await updateChapter(editingChapter.id, {
-      title: editingChapter.title,
-      content: editingChapter.content,
-      status: editingChapter.status,
-    })
-    setEditingChapter(null)
-  }
-  
-  const handleDeleteChapter = async (id: string) => {
-    if (!confirm('确定删除此章节？')) return
-    await deleteChapter(id)
-    if (editingChapter?.id === id) {
-      setEditingChapter(null)
+interface ChaptersProps {
+  book: Book;
+  onUpdate: (data: Partial<Book>) => void;
+  settings?: any;
+}
+
+export default function Chapters({ book, onUpdate, settings }: ChaptersProps) {
+  const [selectedChapter, setSelectedChapter] = useState<number>(book.currentChapter || 1);
+  const [editingContent, setEditingContent] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  const chapters = book.chapters || [];
+  const currentChapter = chapters.find((c) => c.number === selectedChapter);
+
+  // 加载章节内容
+  React.useEffect(() => {
+    if (currentChapter) {
+      setEditingContent(currentChapter.content);
     }
-  }
-  
-  const getWordCount = (content: string) => content?.length || 0
-  const isWithinTarget = (count: number) => count >= wordCountTarget[0] && count <= wordCountTarget[1]
-  
-  if (editingChapter) {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <input
-              type="text"
-              value={editingChapter.title}
-              onChange={(e) => setEditingChapter({ ...editingChapter, title: e.target.value })}
-              className="text-xl font-bold px-3 py-1 border rounded focus:ring-2 focus:ring-primary-500"
-            />
-            <select
-              value={editingChapter.status}
-              onChange={(e) => setEditingChapter({ ...editingChapter, status: e.target.value })}
-              className="px-3 py-1 border rounded"
-            >
-              <option value="draft">草稿</option>
-              <option value="published">已发布</option>
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setEditingChapter(null)}
-              className="px-4 py-2 border rounded hover:bg-gray-50"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleSaveChapter}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500"
-            >
-              保存
-            </button>
-          </div>
-        </div>
-        
-        <textarea
-          value={editingChapter.content}
-          onChange={(e) => setEditingChapter({ ...editingChapter, content: e.target.value })}
-          className="w-full h-[calc(100vh-280px)] p-4 border rounded-lg focus:ring-2 focus:ring-primary-500 resize-none leading-relaxed"
-          placeholder="开始写作..."
-        />
-        
-        <div className="mt-2 flex items-center justify-between text-sm">
-          <span className={isWithinTarget(getWordCount(editingChapter.content)) ? 'text-green-600' : 'text-orange-600'}>
-            字数：{getWordCount(editingChapter.content)} / 目标：{wordCountTarget[0]}-{wordCountTarget[1]}
-          </span>
-        </div>
-      </div>
-    )
-  }
-  
+  }, [selectedChapter]);
+
+  // 保存章节
+  const handleSave = () => {
+    const wordCount = editingContent.replace(/\s/g, '').length;
+    const updatedChapters = chapters.map((c) =>
+      c.number === selectedChapter
+        ? { ...c, content: editingContent, wordCount, updatedAt: Date.now() }
+        : c
+    );
+    onUpdate({
+      chapters: updatedChapters,
+      totalWordCount: updatedChapters.reduce((sum, c) => sum + c.wordCount, 0),
+    });
+  };
+
+  // 新建章节
+  const handleNewChapter = () => {
+    const newNumber = (chapters.length > 0 ? Math.max(...chapters.map((c) => c.number)) : 0) + 1;
+    const newChapter: Chapter = {
+      id: Date.now().toString(),
+      number: newNumber,
+      title: `第${newNumber}章`,
+      content: '',
+      wordCount: 0,
+      status: 'draft',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    onUpdate({
+      chapters: [...chapters, newChapter],
+      currentChapter: newNumber,
+    });
+    setSelectedChapter(newNumber);
+  };
+
+  // AI续写
+  const handleGenerate = async () => {
+    if (!settings?.apiKey) {
+      alert('请先在设置中配置DeepSeek API');
+      return;
+    }
+
+    setGenerating(true);
+
+    try {
+      const previousContent = currentChapter?.content || '';
+      const generated = await window.api.ai.chat({
+        systemPrompt: CHAPTER_AGENT.systemPrompt,
+        userPrompt: CHAPTER_AGENT.generatePrompt(book, selectedChapter, previousContent, book.style),
+      });
+
+      setEditingContent(generated);
+      const wordCount = generated.replace(/\s/g, '').length;
+
+      const updatedChapters = chapters.map((c) =>
+        c.number === selectedChapter
+          ? { ...c, content: generated, wordCount, status: 'draft' as const, updatedAt: Date.now() }
+          : c
+      );
+
+      onUpdate({
+        chapters: updatedChapters,
+        totalWordCount: updatedChapters.reduce((sum, c) => sum + c.wordCount, 0),
+      });
+    } catch (error: any) {
+      alert('生成失败: ' + (error.message || '未知错误'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // 字数统计
+  const wordCount = editingContent.replace(/\s/g, '').length;
+  const targetWordCount = 2000;
+  const progress = Math.min((wordCount / targetWordCount) * 100, 100);
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">章节列表</h3>
-        <button
-          onClick={() => setShowNewChapter(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500"
-        >
-          + 新建章节
-        </button>
-      </div>
-      
-      {showNewChapter && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg flex items-center gap-4">
-          <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="章节标题"
-            className="flex-1 px-3 py-2 border rounded"
-            autoFocus
-          />
+    <div className="flex gap-6 h-full">
+      {/* 章节列表 */}
+      <div className="w-64 bg-slate-800 rounded-xl p-4 overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold">章节列表</h2>
           <button
-            onClick={handleCreateChapter}
-            disabled={!newTitle.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500 disabled:bg-gray-300"
+            onClick={handleNewChapter}
+            className="text-blue-400 hover:text-blue-300 text-xl"
           >
-            创建
-          </button>
-          <button
-            onClick={() => { setShowNewChapter(false); setNewTitle('') }}
-            className="px-4 py-2 border rounded hover:bg-gray-100"
-          >
-            取消
+            +
           </button>
         </div>
-      )}
-      
-      <div className="space-y-2">
-        {chapters.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            暂无章节，点击上方按钮创建第一章
-          </div>
-        ) : (
-          chapters.map((chapter, index) => (
-            <div
+
+        <div className="space-y-2">
+          {chapters.map((chapter) => (
+            <button
               key={chapter.id}
-              className="flex items-center p-4 bg-white border rounded-lg hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setEditingChapter(chapter)}
+              onClick={() => setSelectedChapter(chapter.number)}
+              className={`w-full p-3 rounded-lg text-left transition ${
+                selectedChapter === chapter.number
+                  ? 'bg-blue-500'
+                  : 'bg-slate-700 hover:bg-slate-600'
+              }`}
             >
-              <div className="w-12 text-center">
-                <div className="text-gray-400 font-medium">第{index + 1}章</div>
+              <div className="font-medium">{chapter.title}</div>
+              <div className="text-xs text-gray-400 mt-1">
+                {chapter.wordCount}字 · {chapter.status === 'completed' ? '已完成' : '草稿'}
               </div>
-              <div className="flex-1 ml-4">
-                <div className="font-medium">{chapter.title || '无标题'}</div>
-                <div className="text-sm text-gray-500 mt-1">
-                  字数：{getWordCount(chapter.content)} | 
-                  状态：<span className={chapter.status === 'published' ? 'text-green-600' : 'text-orange-600'}>
-                    {chapter.status === 'published' ? '已发布' : '草稿'}
-                  </span>
-                </div>
-              </div>
-              <div className={`px-3 py-1 rounded-full text-xs ${
-                isWithinTarget(getWordCount(chapter.content)) 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-orange-100 text-orange-700'
-              }`}>
-                {isWithinTarget(getWordCount(chapter.content)) ? '✓达标' : '!字数异常'}
-              </div>
+            </button>
+          ))}
+
+          {chapters.length === 0 && (
+            <div className="text-center text-gray-400 py-8">
+              <p>暂无章节</p>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chapter.id) }}
-                className="ml-4 px-3 py-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                onClick={handleNewChapter}
+                className="mt-2 text-blue-400 hover:text-blue-300"
               >
-                删除
+                创建第一章
               </button>
             </div>
-          ))
+          )}
+        </div>
+      </div>
+
+      {/* 编辑器 */}
+      <div className="flex-1 flex flex-col bg-slate-800 rounded-xl p-4">
+        {currentChapter ? (
+          <>
+            {/* 工具栏 */}
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-700">
+              <div className="flex items-center gap-4">
+                <input
+                  type="text"
+                  value={currentChapter.title}
+                  onChange={(e) => {
+                    const updatedChapters = chapters.map((c) =>
+                      c.number === selectedChapter ? { ...c, title: e.target.value } : c
+                    );
+                    onUpdate({ chapters: updatedChapters });
+                  }}
+                  className="text-xl font-semibold bg-transparent border-b border-transparent hover:border-slate-600 focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="px-4 py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm disabled:opacity-50 transition"
+                >
+                  {generating ? '生成中...' : '✨ AI续写'}
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-sm transition"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+
+            {/* 字数进度 */}
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-400 mb-1">
+                <span>字数：{wordCount}</span>
+                <span>目标：{targetWordCount}字</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition ${
+                    progress >= 100 ? 'bg-green-500' : progress >= 80 ? 'bg-blue-500' : 'bg-orange-500'
+                  }`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+
+            {/* 编辑区 */}
+            <textarea
+              value={editingContent}
+              onChange={(e) => setEditingContent(e.target.value)}
+              placeholder="开始创作..."
+              className="flex-1 w-full p-4 bg-slate-700/50 rounded-lg resize-none focus:outline-none leading-relaxed"
+              style={{ lineHeight: '1.8' }}
+            />
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <p className="text-xl mb-2">暂无选中章节</p>
+              <button
+                onClick={handleNewChapter}
+                className="text-blue-400 hover:text-blue-300"
+              >
+                创建第一章
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
-  )
+  );
 }

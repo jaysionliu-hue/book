@@ -1,229 +1,206 @@
-import { useState, useEffect } from 'react'
-import { useStore } from '../../stores/useStore'
+import React, { useState, useEffect } from 'react';
+import { Settings } from '../../utils/types';
 
-const settingCategories = [
-  { id: 'world', label: '世界观', icon: '🌍' },
-  { id: 'factions', label: '势力体系', icon: '🏛️' },
-  { id: 'rules', label: '规则法则', icon: '⚖️' },
-  { id: 'geography', label: '地理背景', icon: '🗺️' },
-  { id: 'items', label: '道具宝物', icon: '💎' },
-  { id: 'timeline', label: '时间线', icon: '⏰' },
-]
+interface SettingsPageProps {
+  onSave: (settings: Settings) => void;
+}
 
-export default function Settings() {
-  const { currentBook } = useStore()
-  const [activeCategory, setActiveCategory] = useState('world')
-  const [settings, setSettings] = useState<Record<string, string>>({})
-  const [editing, setEditing] = useState(false)
-  const [editContent, setEditContent] = useState('')
-  
+export default function SettingsPage({ onSave }: SettingsPageProps) {
+  const [settings, setSettings] = useState<Settings>({
+    apiKey: '',
+    apiUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+    temperature: 0.7,
+    maxTokens: 2000,
+  });
+
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // 加载设置
   useEffect(() => {
-    loadSettings()
-  }, [currentBook])
-  
-  const loadSettings = async () => {
-    if (!currentBook) return
-    const allSettings = await window.api.settings.list(currentBook.id)
-    const settingsMap: Record<string, string> = {}
-    allSettings.forEach((s: any) => {
-      settingsMap[s.key] = s.content
-    })
-    setSettings(settingsMap)
-  }
-  
+    window.api.settings.get().then((s) => {
+      if (s) setSettings(s);
+    });
+  }, []);
+
+  // 保存设置
   const handleSave = async () => {
-    if (!currentBook) return
-    const existing = await window.api.settings.list(currentBook.id)
-    const existingMap = new Map(existing.map((s: any) => [s.key, s.id]))
-    
-    for (const [key, content] of Object.entries(settings)) {
-      if (existingMap.has(key)) {
-        await window.api.settings.update(existingMap.get(key)!, content)
+    await window.api.settings.save(settings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    onSave(settings);
+  };
+
+  // 测试连接
+  const handleTest = async () => {
+    if (!settings.apiKey) {
+      setTestResult('error');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const response = await fetch(`${settings.apiUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${settings.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: settings.model,
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 10,
+        }),
+      });
+
+      if (response.ok) {
+        setTestResult('success');
       } else {
-        await window.api.settings.create({
-          id: `setting_${Date.now()}_${key}`,
-          book_id: currentBook.id,
-          category: activeCategory,
-          key,
-          content,
-          created_at: Date.now(),
-          updated_at: Date.now(),
-        })
+        setTestResult('error');
       }
+    } catch {
+      setTestResult('error');
+    } finally {
+      setTesting(false);
     }
-    setEditing(false)
-  }
-  
-  const handleEdit = () => {
-    setEditContent(settings[activeCategory] || '')
-    setEditing(true)
-  }
-  
-  const handleChange = (value: string) => {
-    setEditContent(value)
-    setSettings(prev => ({ ...prev, [activeCategory]: value }))
-  }
-  
-  const getTemplate = (category: string) => {
-    const templates: Record<string, string> = {
-      world: `# 世界观设定
+  };
 
-## 核心法则
-描述这个世界的核心运行规则
-
-## 力量体系
-修炼/能力等级划分
-
-## 社会结构
-等级制度、组织势力
-
-## 特殊设定
-本世界独有的规则`,
-      factions: `# 势力体系
-
-## 主要势力
-- 势力A：
-  - 领袖：
-  - 宗旨：
-  - 实力：
-
-## 势力关系
-- A vs B：
-- A vs C：`,
-      rules: `# 规则法则
-
-## 修炼规则
-等级划分与突破条件
-
-## 战斗规则
-战斗体系设定
-
-## 社会规则
-法律、道德、禁忌`,
-      geography: `# 地理背景
-
-## 主要区域
-### 区域A
-- 描述：
-- 势力：
-- 特色：
-
-### 区域B
-- 描述：
-- 势力：
-- 特色：`,
-      items: `# 道具宝物
-
-## 神器
-- 名称：
-- 能力：
-- 来历：
-
-## 重要道具
-- 名称：
-- 能力：
-- 持有者：`,
-      timeline: `# 时间线
-
-## 重要事件
-| 时间 | 事件 | 影响 |
-|------|------|------|
-| | | |
-`,
-    }
-    return templates[category] || ''
-  }
-  
   return (
-    <div className="p-6">
-      <h3 className="text-lg font-bold mb-4">全书设定库</h3>
-      
-      <div className="flex gap-6">
-        {/* Category List */}
-        <div className="w-48">
-          {settingCategories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`w-full text-left px-4 py-3 rounded-lg mb-1 flex items-center gap-3 transition-colors ${
-                activeCategory === cat.id 
-                  ? 'bg-primary-100 text-primary-700 font-bold' 
-                  : 'hover:bg-gray-100'
-              }`}
-            >
-              <span>{cat.icon}</span>
-              <span>{cat.label}</span>
-            </button>
-          ))}
-        </div>
-        
-        {/* Content Area */}
-        <div className="flex-1">
-          {editing ? (
-            <div className="h-full flex flex-col">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-medium">{settingCategories.find(c => c.id === activeCategory)?.label}</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      handleChange(getTemplate(activeCategory))
-                    }}
-                    className="px-3 py-1 text-sm text-gray-500 hover:bg-gray-100 rounded"
-                  >
-                    填充模板
-                  </button>
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="px-3 py-1 border rounded hover:bg-gray-50"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    className="px-4 py-1 bg-primary-600 text-white rounded hover:bg-primary-500"
-                  >
-                    保存
-                  </button>
-                </div>
-              </div>
-              <textarea
-                value={editContent}
-                onChange={(e) => handleChange(e.target.value)}
-                className="flex-1 w-full p-4 border rounded-lg resize-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                placeholder="输入设定内容..."
+    <div className="max-w-2xl mx-auto space-y-8">
+      <h1 className="text-2xl font-bold">设置</h1>
+
+      {/* DeepSeek API配置 */}
+      <section className="bg-slate-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold mb-4">DeepSeek API 配置</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">API Key *</label>
+            <input
+              type="password"
+              value={settings.apiKey}
+              onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
+              placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+              className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              从 <a href="https://platform.deepseek.com" target="_blank" className="text-blue-400 hover:underline">platform.deepseek.com</a> 获取 API Key
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">API 地址</label>
+            <input
+              type="text"
+              value={settings.apiUrl}
+              onChange={(e) => setSettings({ ...settings, apiUrl: e.target.value })}
+              placeholder="https://api.deepseek.com"
+              className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">模型</label>
+              <select
+                value={settings.model}
+                onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none"
+              >
+                <option value="deepseek-chat">deepseek-chat</option>
+                <option value="deepseek-coder">deepseek-coder</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">温度 (Temperature)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="2"
+                value={settings.temperature}
+                onChange={(e) => setSettings({ ...settings, temperature: parseFloat(e.target.value) })}
+                className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none"
               />
+              <p className="text-xs text-gray-500 mt-1">控制随机性，0-2之间</p>
             </div>
-          ) : (
-            <div className="h-full flex flex-col">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-medium">{settingCategories.find(c => c.id === activeCategory)?.label}</span>
-                <button
-                  onClick={handleEdit}
-                  className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500"
-                >
-                  编辑
-                </button>
-              </div>
-              <div className="flex-1 bg-white border rounded-lg p-4 overflow-y-auto">
-                {settings[activeCategory] ? (
-                  <pre className="whitespace-pre-wrap text-sm font-sans">{settings[activeCategory]}</pre>
-                ) : (
-                  <div className="text-gray-400 text-center py-12">
-                    <div className="text-4xl mb-2">📝</div>
-                    <p>暂无设定内容</p>
-                    <button
-                      onClick={handleEdit}
-                      className="mt-2 text-primary-600 hover:underline"
-                    >
-                      点击添加
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">最大生成 Tokens</label>
+            <input
+              type="number"
+              min="100"
+              max="4000"
+              value={settings.maxTokens}
+              onChange={(e) => setSettings({ ...settings, maxTokens: parseInt(e.target.value) })}
+              className="w-full p-3 bg-slate-700 rounded-lg border border-slate-600 focus:border-blue-500 outline-none"
+            />
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={handleTest}
+              disabled={testing || !settings.apiKey}
+              className={`px-6 py-2 rounded-lg transition ${
+                testResult === 'success'
+                  ? 'bg-green-500'
+                  : testResult === 'error'
+                  ? 'bg-red-500'
+                  : 'bg-slate-700 hover:bg-slate-600'
+              } disabled:opacity-50`}
+            >
+              {testing ? '测试中...' : testResult === 'success' ? '✓ 连接成功' : testResult === 'error' ? '✗ 连接失败' : '测试连接'}
+            </button>
+
+            <button
+              onClick={handleSave}
+              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition"
+            >
+              {saved ? '✓ 已保存' : '保存设置'}
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* 题材管理 */}
+      <section className="bg-slate-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold mb-4">题材模板管理</h2>
+        <p className="text-gray-400 text-sm mb-4">
+          管理创作时可选择的题材分类模板
+        </p>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-700/50 rounded-lg">
+              <h3 className="font-medium mb-2">女频题材</h3>
+              <p className="text-sm text-gray-400">豪门总裁 | 甜宠 | 虐恋 | 重生 | 穿越 | 复仇 | 修仙 | 都市 | 古言 | 悬疑</p>
+            </div>
+            <div className="p-4 bg-slate-700/50 rounded-lg">
+              <h3 className="font-medium mb-2">男频题材</h3>
+              <p className="text-sm text-gray-400">玄幻 | 都市 | 穿越 | 系统 | 无敌 | 修仙 | 游戏 | 科幻 | 武侠 | 异能</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-500">
+            题材分类在创建书籍时选择，支持自定义添加新题材
+          </p>
+        </div>
+      </section>
+
+      {/* 关于 */}
+      <section className="bg-slate-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold mb-4">关于</h2>
+        <div className="space-y-2 text-gray-400">
+          <p>网文创作工作室 v1.0.0</p>
+          <p className="text-sm">基于DeepSeek API的智能网文创作助手</p>
+          <p className="text-sm">支持人物设定、世界观生成、剧情大纲、章节续写等功能</p>
+        </div>
+      </section>
     </div>
-  )
+  );
 }

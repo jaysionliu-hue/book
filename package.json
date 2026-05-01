@@ -1,41 +1,20 @@
 {
-  "name": "webnovel-studio",
+  "name": "webnovel-studio-v2",
   "version": "1.0.0",
-  "description": "网文创作工作室 - 专业网文创作管理工具",
-  "main": "dist/main/main/index.js",
+  "description": "专业网文创作工作室 - AI智能辅助长线创作",
+  "main": "dist/main/index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && electron .",
+    "build": "npm run build:vite && npm run build:electron",
     "build:vite": "vite build",
     "build:electron": "tsc -p tsconfig.main.json",
-    "build": "npm run build:vite && npm run build:electron",
-    "preview": "vite preview",
-    "package": "npm run build && electron-builder"
-  },
-  "keywords": ["novel", "writing", "electron"],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/react": "^18.2.48",
-    "@types/react-dom": "^18.2.18",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.17",
-    "electron": "^28.1.0",
-    "electron-builder": "^24.9.1",
-    "postcss": "^8.4.33",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12"
-  },
-  "dependencies": {
-    "electron-store": "^8.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "zustand": "^4.5.0"
+    "package": "npm run build && electron-builder --win --dir"
   },
   "build": {
     "appId": "com.webnovel.studio",
-    "productName": "WebNovel Studio",
+    "productName": "网文创作工作室",
     "directories": {
       "output": "release"
     },
@@ -43,17 +22,29 @@
       "dist/**/*",
       "package.json"
     ],
-    "extraMetadata": {
-      "main": "dist/main/main/index.js"
-    },
     "win": {
-      "target": [
-        {
-          "target": "dir",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "asar": true
+      "target": "dir"
+    }
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/uuid": "^9.0.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "concurrently": "^8.2.2",
+    "electron": "^28.2.0",
+    "postcss": "^8.4.33",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "wait-on": "^7.2.0"
   }
 }

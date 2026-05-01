@@ -1,334 +1,377 @@
-import { useState } from 'react'
-import { useStore } from '../../stores/useStore'
+import React, { useState } from 'react';
+import { Book, Character, CHARACTER_AGENT } from '../../utils/types';
 
-const categories = [
-  { id: 'protagonist', label: '主角', color: 'blue' },
-  { id: 'supporting', label: '配角', color: 'yellow' },
-  { id: 'antagonist', label: '反派', color: 'red' },
-]
+interface CharactersProps {
+  book: Book;
+  onUpdate: (data: Partial<Book>) => void;
+  settings?: any;
+}
 
-export default function Characters() {
-  const { characters, currentBook, createCharacter, updateCharacter, deleteCharacter } = useStore()
-  const [showNewChar, setShowNewChar] = useState(false)
-  const [editingChar, setEditingChar] = useState<any>(null)
-  const [newChar, setNewChar] = useState({
-    name: '',
-    category: 'protagonist' as string,
-  })
-  const [filterCategory, setFilterCategory] = useState<string>('all')
-  
-  const handleCreateChar = async () => {
-    if (!newChar.name.trim()) return
-    await createCharacter({
-      book_id: currentBook!.id,
-      name: newChar.name,
-      category: newChar.category,
-      data: {
-        name: newChar.name,
-        personality: '',
-        background: '',
-        desires: '',
-        weaknesses: '',
-        relationships: '',
-        secrets: '',
-        growth: '',
-        appearance: '',
-        speechStyle: '',
-      },
-    })
-    setNewChar({ name: '', category: 'protagonist' })
-    setShowNewChar(false)
-  }
-  
-  const handleSaveChar = async () => {
-    if (!editingChar) return
-    await updateCharacter(editingChar.id, editingChar.data)
-    setEditingChar(null)
-  }
-  
-  const filteredChars = filterCategory === 'all' 
-    ? characters 
-    : characters.filter(c => c.category === filterCategory)
-  
-  if (editingChar) {
-    return (
-      <div className="p-6">
+const EMPTY_CHARACTER: Partial<Character> = {
+  name: '',
+  type: 'protagonist',
+  personality: [],
+  motivation: '',
+  fear: '',
+  background: '',
+  arc: '',
+};
+
+export default function Characters({ book, onUpdate, settings }: CharactersProps) {
+  const [selectedChar, setSelectedChar] = useState<string | null>(null);
+  const [editingChar, setEditingChar] = useState<Partial<Character>>(EMPTY_CHARACTER);
+  const [generating, setGenerating] = useState(false);
+
+  const characters = book.characters || [];
+  const currentChar = characters.find((c) => c.id === selectedChar);
+
+  // 选中角色
+  React.useEffect(() => {
+    if (currentChar) {
+      setEditingChar(currentChar);
+    } else {
+      setEditingChar(EMPTY_CHARACTER);
+    }
+  }, [selectedChar]);
+
+  // 保存角色
+  const handleSave = () => {
+    if (!editingChar.name) {
+      alert('请输入角色名称');
+      return;
+    }
+
+    if (selectedChar) {
+      const updated = characters.map((c) =>
+        c.id === selectedChar ? { ...c, ...editingChar } : c
+      );
+      onUpdate({ characters: updated });
+    } else {
+      const newChar: Character = {
+        id: Date.now().toString(),
+        name: editingChar.name || '',
+        type: editingChar.type || 'protagonist',
+        age: editingChar.age,
+        occupation: editingChar.occupation,
+        appearance: editingChar.appearance,
+        personality: editingChar.personality || [],
+        motivation: editingChar.motivation,
+        fear: editingChar.fear,
+        background: editingChar.background,
+        relationships: editingChar.relationships,
+        arc: editingChar.arc,
+        secrets: editingChar.secrets,
+        habits: editingChar.habits,
+        quote: editingChar.quote,
+      };
+      onUpdate({ characters: [...characters, newChar] });
+      setSelectedChar(newChar.id);
+    }
+  };
+
+  // 删除角色
+  const handleDelete = () => {
+    if (!selectedChar) return;
+    if (!confirm('确定删除这个角色吗？')) return;
+    const updated = characters.filter((c) => c.id !== selectedChar);
+    onUpdate({ characters: updated });
+    setSelectedChar(null);
+    setEditingChar(EMPTY_CHARACTER);
+  };
+
+  // 新建角色
+  const handleNew = () => {
+    setSelectedChar(null);
+    setEditingChar(EMPTY_CHARACTER);
+  };
+
+  // AI生成角色
+  const handleGenerate = async () => {
+    if (!settings?.apiKey) {
+      alert('请先在设置中配置DeepSeek API');
+      return;
+    }
+
+    setGenerating(true);
+
+    try {
+      const generated = await window.api.ai.chat({
+        systemPrompt: CHARACTER_AGENT.systemPrompt,
+        userPrompt: CHARACTER_AGENT.generatePrompt(book.genreName, book.coreSetting?.theme || '', characters),
+      });
+
+      try {
+        const chars = JSON.parse(generated);
+        if (Array.isArray(chars)) {
+          onUpdate({ characters: [...characters, ...chars.map((c: any, i: number) => ({
+            ...c,
+            id: (Date.now() + i).toString(),
+          }))]});
+        }
+      } catch {
+        setEditingChar({
+          ...EMPTY_CHARACTER,
+          personality: [generated],
+        });
+      }
+    } catch (error: any) {
+      alert('生成失败: ' + (error.message || '未知错误'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const groupedChars = {
+    protagonist: characters.filter((c) => c.type === 'protagonist'),
+    supporting: characters.filter((c) => c.type === 'supporting'),
+    antagonist: characters.filter((c) => c.type === 'antagonist'),
+  };
+
+  return (
+    <div className="flex gap-6 h-full">
+      {/* 角色列表 */}
+      <div className="w-72 bg-slate-800 rounded-xl p-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">编辑人物：{editingChar.data.name}</h3>
-          <div className="flex gap-2">
+          <h2 className="font-semibold">人物档案库</h2>
+          <button
+            onClick={handleNew}
+            className="text-blue-400 hover:text-blue-300 text-xl"
+          >
+            +
+          </button>
+        </div>
+
+        {/* 主角 */}
+        <div className="mb-4">
+          <h3 className="text-xs text-gray-400 uppercase mb-2">主角</h3>
+          <div className="space-y-1">
+            {groupedChars.protagonist.map((char) => (
+              <button
+                key={char.id}
+                onClick={() => setSelectedChar(char.id)}
+                className={`w-full p-2 rounded-lg text-left text-sm transition ${
+                  selectedChar === char.id ? 'bg-blue-500' : 'hover:bg-slate-700'
+                }`}
+              >
+                {char.name || '未命名'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 配角 */}
+        <div className="mb-4">
+          <h3 className="text-xs text-gray-400 uppercase mb-2">配角</h3>
+          <div className="space-y-1">
+            {groupedChars.supporting.map((char) => (
+              <button
+                key={char.id}
+                onClick={() => setSelectedChar(char.id)}
+                className={`w-full p-2 rounded-lg text-left text-sm transition ${
+                  selectedChar === char.id ? 'bg-blue-500' : 'hover:bg-slate-700'
+                }`}
+              >
+                {char.name || '未命名'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 反派 */}
+        <div className="mb-4">
+          <h3 className="text-xs text-gray-400 uppercase mb-2">反派</h3>
+          <div className="space-y-1">
+            {groupedChars.antagonist.map((char) => (
+              <button
+                key={char.id}
+                onClick={() => setSelectedChar(char.id)}
+                className={`w-full p-2 rounded-lg text-left text-sm transition ${
+                  selectedChar === char.id ? 'bg-blue-500' : 'hover:bg-slate-700'
+                }`}
+              >
+                {char.name || '未命名'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="w-full py-2 bg-purple-500 hover:bg-purple-600 rounded-lg text-sm disabled:opacity-50 transition mt-4"
+        >
+          {generating ? '生成中...' : '✨ AI生成角色'}
+        </button>
+      </div>
+
+      {/* 角色详情 */}
+      <div className="flex-1 bg-slate-800 rounded-xl p-6 overflow-y-auto">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* 基本信息 */}
+          <section>
+            <h3 className="text-lg font-semibold mb-4">基本信息</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm text-gray-400">姓名 *</label>
+                <input
+                  type="text"
+                  value={editingChar.name || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, name: e.target.value })}
+                  placeholder="角色姓名"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400">类型</label>
+                <select
+                  value={editingChar.type || 'protagonist'}
+                  onChange={(e) => setEditingChar({ ...editingChar, type: e.target.value as any })}
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                >
+                  <option value="protagonist">主角</option>
+                  <option value="supporting">配角</option>
+                  <option value="antagonist">反派</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-gray-400">年龄</label>
+                <input
+                  type="text"
+                  value={editingChar.age || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, age: e.target.value })}
+                  placeholder="如：25岁"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+              <div className="col-span-3">
+                <label className="text-sm text-gray-400">职业/身份</label>
+                <input
+                  type="text"
+                  value={editingChar.occupation || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, occupation: e.target.value })}
+                  placeholder="详细职位"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* 深层背景 */}
+          <section>
+            <h3 className="text-lg font-semibold mb-4">深层背景</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-gray-400">童年关键事件</label>
+                <textarea
+                  value={editingChar.background || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, background: e.target.value })}
+                  placeholder="创伤或转折事件"
+                  rows={2}
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1 resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-400">核心恐惧（含原因）</label>
+                  <textarea
+                    value={editingChar.fear || ''}
+                    onChange={(e) => setEditingChar({ ...editingChar, fear: e.target.value })}
+                    rows={2}
+                    className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1 resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400">内心渴望（驱动力）</label>
+                  <textarea
+                    value={editingChar.motivation || ''}
+                    onChange={(e) => setEditingChar({ ...editingChar, motivation: e.target.value })}
+                    rows={2}
+                    className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1 resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 性格与行为 */}
+          <section>
+            <h3 className="text-lg font-semibold mb-4">性格与行为特征</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm text-gray-400">性格关键词</label>
+                <input
+                  type="text"
+                  value={editingChar.personality?.join('、') || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, personality: e.target.value.split('、') })}
+                  placeholder="如：冷静、果断、外冷内热"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-gray-400">说话习惯/口头禅</label>
+                <input
+                  type="text"
+                  value={editingChar.quote || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, quote: e.target.value })}
+                  placeholder="标志性口头禅"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-sm text-gray-400">习惯动作/小动作</label>
+                <input
+                  type="text"
+                  value={editingChar.habits || ''}
+                  onChange={(e) => setEditingChar({ ...editingChar, habits: e.target.value })}
+                  placeholder="紧张时的习惯"
+                  className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none mt-1"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* 人物弧光 */}
+          <section>
+            <h3 className="text-lg font-semibold mb-4">人物弧光</h3>
+            <textarea
+              value={editingChar.arc || ''}
+              onChange={(e) => setEditingChar({ ...editingChar, arc: e.target.value })}
+              placeholder="从A状态到B状态的成长轨迹，含性格缺陷与成长点"
+              rows={3}
+              className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none resize-none"
+            />
+          </section>
+
+          {/* 隐藏秘密 */}
+          <section>
+            <h3 className="text-lg font-semibold mb-4">隐藏秘密</h3>
+            <textarea
+              value={editingChar.secrets || ''}
+              onChange={(e) => setEditingChar({ ...editingChar, secrets: e.target.value })}
+              placeholder="不为人知的秘密"
+              rows={2}
+              className="w-full p-2 bg-slate-700 rounded border border-slate-600 focus:border-blue-500 outline-none resize-none"
+            />
+          </section>
+
+          {/* 操作按钮 */}
+          <div className="flex justify-between pt-4 border-t border-slate-700">
             <button
-              onClick={() => setEditingChar(null)}
-              className="px-4 py-2 border rounded hover:bg-gray-50"
+              onClick={handleDelete}
+              disabled={!selectedChar}
+              className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg disabled:opacity-50 transition"
             >
-              取消
+              删除角色
             </button>
             <button
-              onClick={handleSaveChar}
-              className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500"
+              onClick={handleSave}
+              className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg transition"
             >
               保存
             </button>
           </div>
         </div>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
-            <input
-              type="text"
-              value={editingChar.data.name}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, name: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">角色定位</label>
-            <select
-              value={editingChar.category}
-              onChange={(e) => setEditingChar({ ...editingChar, category: e.target.value })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-            >
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">性格底色</label>
-            <input
-              type="text"
-              value={editingChar.data.personality}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, personality: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="如：表面温和、内心偏执"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">核心欲望</label>
-            <input
-              type="text"
-              value={editingChar.data.desires}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, desires: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="角色最想要什么"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">软肋/执念</label>
-            <input
-              type="text"
-              value={editingChar.data.weaknesses}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, weaknesses: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="角色的弱点或执念"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">过往经历</label>
-            <input
-              type="text"
-              value={editingChar.data.background}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, background: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="塑造角色的关键经历"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">外貌特征</label>
-            <input
-              type="text"
-              value={editingChar.data.appearance}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, appearance: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="独特的外貌特征"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">说话风格</label>
-            <input
-              type="text"
-              value={editingChar.data.speechStyle}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, speechStyle: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500"
-              placeholder="口头禅、说话习惯"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">人际关系</label>
-            <textarea
-              value={editingChar.data.relationships}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, relationships: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500 resize-none"
-              rows={2}
-              placeholder="与谁有什么关系"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">隐藏秘密</label>
-            <textarea
-              value={editingChar.data.secrets}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, secrets: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500 resize-none"
-              rows={2}
-              placeholder="只有你知道的事"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">成长轨迹</label>
-            <textarea
-              value={editingChar.data.growth}
-              onChange={(e) => setEditingChar({
-                ...editingChar,
-                data: { ...editingChar.data, growth: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-primary-500 resize-none"
-              rows={2}
-              placeholder="角色如何成长/转变"
-            />
-          </div>
-        </div>
-      </div>
-    )
-  }
-  
-  return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold">人物档案库</h3>
-        <button
-          onClick={() => setShowNewChar(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500"
-        >
-          + 新建人物
-        </button>
-      </div>
-      
-      {/* Filter */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setFilterCategory('all')}
-          className={`px-3 py-1 rounded-full text-sm ${filterCategory === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-200'}`}
-        >
-          全部
-        </button>
-        {categories.map(c => (
-          <button
-            key={c.id}
-            onClick={() => setFilterCategory(c.id)}
-            className={`px-3 py-1 rounded-full text-sm ${
-              filterCategory === c.id 
-                ? c.color === 'blue' ? 'bg-blue-600 text-white' 
-                  : c.color === 'yellow' ? 'bg-yellow-500 text-white' 
-                  : 'bg-red-600 text-white'
-                : 'bg-gray-200'
-            }`}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-      
-      {/* New Character */}
-      {showNewChar && (
-        <div className="mb-4 p-4 bg-gray-50 rounded-lg flex items-center gap-4">
-          <input
-            type="text"
-            value={newChar.name}
-            onChange={(e) => setNewChar({ ...newChar, name: e.target.value })}
-            placeholder="人物姓名"
-            className="flex-1 px-3 py-2 border rounded"
-            autoFocus
-          />
-          <select
-            value={newChar.category}
-            onChange={(e) => setNewChar({ ...newChar, category: e.target.value })}
-            className="px-3 py-2 border rounded"
-          >
-            {categories.map(c => (
-              <option key={c.id} value={c.id}>{c.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={handleCreateChar}
-            disabled={!newChar.name.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-500 disabled:bg-gray-300"
-          >
-            创建
-          </button>
-          <button
-            onClick={() => { setShowNewChar(false); setNewChar({ name: '', category: 'protagonist' }) }}
-            className="px-4 py-2 border rounded hover:bg-gray-100"
-          >
-            取消
-          </button>
-        </div>
-      )}
-      
-      {/* Character List */}
-      <div className="grid grid-cols-3 gap-4">
-        {filteredChars.length === 0 ? (
-          <div className="col-span-3 text-center py-12 text-gray-500">
-            暂无人物，点击上方按钮创建
-          </div>
-        ) : (
-          filteredChars.map(char => (
-            <div
-              key={char.id}
-              className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => setEditingChar(char)}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-bold">{char.data?.name || char.name}</div>
-                <span className={`px-2 py-0.5 rounded-full text-xs ${
-                  char.category === 'protagonist' ? 'bg-blue-100 text-blue-700' 
-                    : char.category === 'supporting' ? 'bg-yellow-100 text-yellow-700' 
-                    : 'bg-red-100 text-red-700'
-                }`}>
-                  {categories.find(c => c.id === char.category)?.label}
-                </span>
-              </div>
-              <div className="text-sm text-gray-500 line-clamp-2">
-                {char.data?.personality || '未填写性格'}
-              </div>
-              <div className="mt-2 flex justify-end">
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteCharacter(char.id) }}
-                  className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded"
-                >
-                  删除
-                </button>
-              </div>
-            </div>
-          ))
-        )}
       </div>
     </div>
-  )
+  );
 }
